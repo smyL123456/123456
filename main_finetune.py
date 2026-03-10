@@ -1,4 +1,4 @@
-# Copyright (c) Meta Platforms, Inc. and affiliates.
+﻿# Copyright (c) Meta Platforms, Inc. and affiliates.
 
 # All rights reserved.
 
@@ -44,12 +44,26 @@ def get_args_parser():
                         help='gradient accumulation steps')
 
     # Model parameters
-    parser.add_argument('--model', default='AIDE', type=str, metavar='MODEL',
-                        help='Name of model to train')
+    parser.add_argument('--model', default='AIDE_3BRANCH', type=str, metavar='MODEL',
+                        help='Model name: AIDE_3BRANCH (new, train/eval) or AIDE_2BRANCH (baseline eval)')
     parser.add_argument('--resnet_path', default=None, type=str, metavar='MODEL',
                         help='Path of resnet model')
     parser.add_argument('--convnext_path', default=None, type=str, metavar='MODEL',
                         help='Path of ConvNeXt of model ')
+    parser.add_argument('--use_npr', type=str2bool, default=True,
+                        help='Deprecated: kept for compatibility; model selection now controls branch count')
+    parser.add_argument('--npr_path', default=None, type=str,
+                        help='Path to pretrained NPR checkpoint')
+    parser.add_argument('--fusion_type', default='concat', choices=['concat'], type=str,
+                        help='Late fusion type')
+    parser.add_argument('--freeze_npr', type=str2bool, default=True,
+                        help='Freeze NPR branch parameters')
+    parser.add_argument('--npr_input_size', default=224, type=int,
+                        help='Input size for NPR branch')
+    parser.add_argument('--npr_proj_dim', default=128, type=int,
+                        help='Projection dimension for NPR features')
+    parser.add_argument('--npr_branch_dropout', default=0.3, type=float,
+                        help='Branch-level dropout probability applied to NPR projected features during training')
     
     # EMA related parameters
     parser.add_argument('--model_ema', type=str2bool, default=False)
@@ -252,9 +266,22 @@ def main(args):
             label_smoothing=args.smoothing, num_classes=args.nb_classes)
 
 
+    if args.model in ['AIDE_3BRANCH', 'AIDE', 'AIDE_NPR'] and not args.npr_path:
+        raise ValueError('--npr_path must be provided for 3-branch model evaluation/training')
+
+    if args.model not in AIDE.__dict__:
+        raise ValueError(f'Unknown model: {args.model}. Available: AIDE_3BRANCH, AIDE_2BRANCH, AIDE, AIDE_NPR')
+
     model = AIDE.__dict__[args.model](
-        resnet_path=args.resnet_path, 
-        convnext_path=args.convnext_path
+        resnet_path=args.resnet_path,
+        convnext_path=args.convnext_path,
+        use_npr=args.use_npr,
+        npr_path=args.npr_path,
+        fusion_type=args.fusion_type,
+        freeze_npr=args.freeze_npr,
+        npr_input_size=args.npr_input_size,
+        npr_proj_dim=args.npr_proj_dim,
+        npr_branch_dropout=args.npr_branch_dropout
     )
         
     model.to(device)
@@ -447,3 +474,7 @@ if __name__ == '__main__':
     if args.output_dir:
         Path(args.output_dir).mkdir(parents=True, exist_ok=True)
     main(args)
+
+
+
+
