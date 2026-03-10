@@ -1,0 +1,10 @@
+# Ignore newly added dataset artifacts
+/data/**
+/datasets/**
+
+# Ignore newly added checkpoints by default
+/pretrained_ckpts/**
+
+# Keep this required checkpoint tracked
+!/pretrained_ckpts/
+!/pretrained_ckpts/NPR.pth
