@@ -50,8 +50,8 @@ AIDE（**A**I-generated **I**mage **DE**tector）是一个用于检测 AI 生成
 
 ```bash
 # 1. 克隆仓库
-git clone https://github.com/<your-username>/<your-repo>.git
-cd <your-repo>
+https://github.com/smyL123456/123456
+cd 123456
 
 # 2. 安装 PyTorch（需要 CUDA 11.8）
 conda install pytorch==2.0.1 torchvision==0.15.2 torchaudio==2.0.2 -c pytorch
