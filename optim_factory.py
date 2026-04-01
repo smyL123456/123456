@@ -173,6 +173,9 @@ def create_optimizer(args, model, get_num_layer=None, get_layer_scale=None, filt
         optimizer = optim.Adam(parameters, **opt_args)
     elif opt_lower == 'adamw':
         optimizer = optim.AdamW(parameters, **opt_args)
+    elif opt_lower == 'adamwfused':
+        # PyTorch >= 2.0 native fused AdamW, no APEX required
+        optimizer = optim.AdamW(parameters, fused=True, **opt_args)
     elif opt_lower == 'nadam':
         optimizer = Nadam(parameters, **opt_args)
     elif opt_lower == 'radam':

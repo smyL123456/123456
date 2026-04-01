@@ -70,6 +70,7 @@ python main_finetune.py \
   --epochs "${EPOCHS}" \
   --num_workers "${NUM_WORKERS}" \
   --use_amp True \
+  --opt adamwfused \
   --freeze_npr True \
   --npr_proj_dim 128 \
   --npr_branch_dropout 0.3 \
