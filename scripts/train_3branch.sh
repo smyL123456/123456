@@ -20,8 +20,8 @@ NPR_PATH="pretrained_ckpts/NPR.pth"
 OUTPUT_DIR="results/3branch_train"
 
 # Single-GPU defaults.
-BATCH_SIZE=4
-UPDATE_FREQ=4
+BATCH_SIZE=8
+UPDATE_FREQ=2
 BLR=1e-4
 EPOCHS=20
 SAVE_FREQ=5

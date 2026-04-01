@@ -84,8 +84,6 @@ def train_one_epoch(model: torch.nn.Module, criterion: torch.nn.Module,
                 if model_ema is not None:
                     model_ema.update(model)
         
-        torch.cuda.synchronize()
-
         if mixup_fn is None:
             class_acc = (output.max(-1)[-1] == targets).float().mean()
         else:
@@ -142,7 +140,7 @@ def evaluate(data_loader, model, device, use_amp=False):
 
         # compute output
         if use_amp:
-            with torch.cuda.amp.autocast(dytpe=torch.bfloat16):
+            with torch.cuda.amp.autocast():
                 output = model(images)
                 if isinstance(output, dict):
                     output = output['logits']
@@ -161,11 +159,8 @@ def evaluate(data_loader, model, device, use_amp=False):
             predictions = torch.cat((predictions, output), 0)
             labels = torch.cat((labels, target), 0)
 
-        torch.cuda.synchronize()
-
-        acc1, acc5 = accuracy(output, target, topk=(1, 2))
-
         batch_size = images.shape[0]
+        acc1, acc5 = accuracy(output, target, topk=(1, 2))
         metric_logger.update(loss=loss.item())
         metric_logger.meters['acc1'].update(acc1.item(), n=batch_size)
         metric_logger.meters['acc5'].update(acc5.item(), n=batch_size)
