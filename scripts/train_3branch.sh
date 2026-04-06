@@ -13,12 +13,12 @@ REPO_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 cd "${REPO_DIR}"
 
 # Paths (edit these).
-TRAIN_DATA="/path/to/progan/train"
-EVAL_DATA="/path/to/progan/eval"
-RESNET_PATH="pretrained_ckpts/resnet50.pth"
-CONVNEXT_PATH="pretrained_ckpts/open_clip_pytorch_model.bin"
-NPR_PATH="pretrained_ckpts/NPR.pth"
-OUTPUT_DIR="results/3branch_train"
+TRAIN_DATA="/data/CNNSpot/progan_train"
+EVAL_DATA="/data/CNNSpot/progan_val"
+RESNET_PATH="/AIGCDetect/models/123456/pretrained_ckpts/resnet50.pth"
+CONVNEXT_PATH="/AIGCDetect/models/123456/pretrained_ckpts/open_clip_pytorch_model.bin"
+NPR_PATH="/AIGCDetect/models/123456/pretrained_ckpts/NPR.pth"
+OUTPUT_DIR="/AIGCDetect/models/123456/results"
 
 # GPU configuration (set NUM_GPUS=2 for dual-GPU training).
 NUM_GPUS=${NUM_GPUS:-1}
@@ -33,12 +33,12 @@ else
   # Multi-GPU: data parallel, no accumulation needed
   BATCH_SIZE=8
   UPDATE_FREQ=1
-  NUM_WORKERS=12
+  NUM_WORKERS=16
 fi
 
 BLR=1e-4
 EPOCHS=20
-SAVE_FREQ=5
+SAVE_FREQ=3
 
 PY_ARGS=("$@")
 
