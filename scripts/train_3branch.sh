@@ -36,9 +36,11 @@ else
   NUM_WORKERS=16
 fi
 
-BLR=1e-4
-EPOCHS=20
+BLR=5e-5
+WARMUP_EPOCHS=2
+EPOCHS=10
 SAVE_FREQ=3
+WEIGHT_DECAY=0.05
 
 PY_ARGS=("$@")
 
@@ -91,12 +93,14 @@ if [ "${NUM_GPUS}" -eq 1 ]; then
     --batch_size "${BATCH_SIZE}" \
     --update_freq "${UPDATE_FREQ}" \
     --blr "${BLR}" \
+    --warmup_epochs "${WARMUP_EPOCHS}" \
+    --weight_decay "${WEIGHT_DECAY}" \
     --epochs "${EPOCHS}" \
     --num_workers "${NUM_WORKERS}" \
     --use_amp True \
     --freeze_npr True \
     --npr_proj_dim 128 \
-    --npr_branch_dropout 0.3 \
+    --npr_branch_dropout 0.5 \
     --save_ckpt True \
     --save_ckpt_freq "${SAVE_FREQ}" \
     "${PY_ARGS[@]}"
@@ -113,12 +117,14 @@ else
     --batch_size "${BATCH_SIZE}" \
     --update_freq "${UPDATE_FREQ}" \
     --blr "${BLR}" \
+    --warmup_epochs "${WARMUP_EPOCHS}" \
+    --weight_decay "${WEIGHT_DECAY}" \
     --epochs "${EPOCHS}" \
     --num_workers "${NUM_WORKERS}" \
     --use_amp True \
     --freeze_npr True \
     --npr_proj_dim 128 \
-    --npr_branch_dropout 0.3 \
+    --npr_branch_dropout 0.5 \
     --save_ckpt True \
     --save_ckpt_freq "${SAVE_FREQ}" \
     "${PY_ARGS[@]}"

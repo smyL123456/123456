@@ -27,8 +27,9 @@ ImageFile.LOAD_TRUNCATED_IMAGES = True
 import kornia.augmentation as K
 
 Perturbations = K.container.ImageSequential(
-    K.RandomGaussianBlur(kernel_size=(3, 3), sigma=(0.1, 3.0), p=0.1),
-    K.RandomJPEG(jpeg_quality=(30, 100), p=0.1)
+    K.RandomGaussianBlur(kernel_size=(3, 3), sigma=(0.1, 3.0), p=0.3),
+    K.RandomJPEG(jpeg_quality=(30, 100), p=0.3),
+    K.ColorJitter(brightness=0.2, contrast=0.2, saturation=0.2, hue=0.1, p=0.2)
 )
 
 transform_before = transforms.Compose([
@@ -99,7 +100,11 @@ class TrainDataset(Dataset):
                         self.data_list.append({"image_path": os.path.join(file_path, '0_real', image_path), "label" : 0})
                     for image_path in os.listdir(os.path.join(file_path, '1_fake')):
                         self.data_list.append({"image_path": os.path.join(file_path, '1_fake', image_path), "label" : 1})
-                
+
+        # Shuffle data_list to mix real and fake samples
+        if is_train:
+            random.shuffle(self.data_list)
+
         self.dct = DCT_base_Rec_Module()
 
 
