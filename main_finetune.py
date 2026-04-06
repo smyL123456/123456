@@ -335,7 +335,7 @@ def main(args):
         get_layer_scale=assigner.get_scale if assigner is not None else None)
     loss_scaler = NativeScaler()
 
-    if mixup_fn is not None:
+    if mixup_fn is not None or getattr(args, 'manifold_mixup', False):
         # smoothing is handled with mixup label transform
         criterion = SoftTargetCrossEntropy()
     elif args.smoothing > 0.:
