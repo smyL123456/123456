@@ -94,7 +94,6 @@ if [ "${NUM_GPUS}" -eq 1 ]; then
     --epochs "${EPOCHS}" \
     --num_workers "${NUM_WORKERS}" \
     --use_amp True \
-    --opt adamwfused \
     --freeze_npr True \
     --npr_proj_dim 128 \
     --npr_branch_dropout 0.3 \
@@ -117,7 +116,6 @@ else
     --epochs "${EPOCHS}" \
     --num_workers "${NUM_WORKERS}" \
     --use_amp True \
-    --opt adamwfused \
     --freeze_npr True \
     --npr_proj_dim 128 \
     --npr_branch_dropout 0.3 \
