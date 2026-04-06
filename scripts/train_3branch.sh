@@ -1,7 +1,8 @@
 ﻿#!/usr/bin/env bash
-# Train AIDE_3BRANCH on a single GPU.
+# Train AIDE_3BRANCH on single or multi-GPU.
 # Usage:
-#   bash scripts/train_3branch.sh
+#   Single GPU:  bash scripts/train_3branch.sh
+#   Dual GPU:    NUM_GPUS=2 bash scripts/train_3branch.sh
 #   or override variables below and run.
 
 set -euo pipefail
@@ -19,13 +20,25 @@ CONVNEXT_PATH="pretrained_ckpts/open_clip_pytorch_model.bin"
 NPR_PATH="pretrained_ckpts/NPR.pth"
 OUTPUT_DIR="results/3branch_train"
 
-# Single-GPU defaults.
-BATCH_SIZE=8
-UPDATE_FREQ=2
+# GPU configuration (set NUM_GPUS=2 for dual-GPU training).
+NUM_GPUS=${NUM_GPUS:-1}
+
+# Training hyperparameters (optimized for RTX 4090).
+if [ "${NUM_GPUS}" -eq 1 ]; then
+  # Single GPU: use gradient accumulation
+  BATCH_SIZE=8
+  UPDATE_FREQ=2
+  NUM_WORKERS=8
+else
+  # Multi-GPU: data parallel, no accumulation needed
+  BATCH_SIZE=8
+  UPDATE_FREQ=1
+  NUM_WORKERS=12
+fi
+
 BLR=1e-4
 EPOCHS=20
 SAVE_FREQ=5
-NUM_WORKERS=4
 
 PY_ARGS=("$@")
 
@@ -56,27 +69,62 @@ fi
 
 mkdir -p "${OUTPUT_DIR}"
 
-python main_finetune.py \
-  --model AIDE_3BRANCH \
-  --data_path "${TRAIN_DATA}" \
-  --eval_data_path "${EVAL_DATA}" \
-  --resnet_path "${RESNET_PATH}" \
-  --convnext_path "${CONVNEXT_PATH}" \
-  --npr_path "${NPR_PATH}" \
-  --output_dir "${OUTPUT_DIR}" \
-  --batch_size "${BATCH_SIZE}" \
-  --update_freq "${UPDATE_FREQ}" \
-  --blr "${BLR}" \
-  --epochs "${EPOCHS}" \
-  --num_workers "${NUM_WORKERS}" \
-  --use_amp True \
-  --opt adamwfused \
-  --freeze_npr True \
-  --npr_proj_dim 128 \
-  --npr_branch_dropout 0.3 \
-  --save_ckpt True \
-  --save_ckpt_freq "${SAVE_FREQ}" \
-  "${PY_ARGS[@]}"
+echo "=========================================="
+echo "Training Configuration:"
+echo "  GPUs: ${NUM_GPUS}"
+echo "  Batch size per GPU: ${BATCH_SIZE}"
+echo "  Gradient accumulation: ${UPDATE_FREQ}"
+echo "  Effective batch size: $((BATCH_SIZE * UPDATE_FREQ * NUM_GPUS))"
+echo "  Workers: ${NUM_WORKERS}"
+echo "=========================================="
+
+if [ "${NUM_GPUS}" -eq 1 ]; then
+  # Single GPU training
+  python main_finetune.py \
+    --model AIDE_3BRANCH \
+    --data_path "${TRAIN_DATA}" \
+    --eval_data_path "${EVAL_DATA}" \
+    --resnet_path "${RESNET_PATH}" \
+    --convnext_path "${CONVNEXT_PATH}" \
+    --npr_path "${NPR_PATH}" \
+    --output_dir "${OUTPUT_DIR}" \
+    --batch_size "${BATCH_SIZE}" \
+    --update_freq "${UPDATE_FREQ}" \
+    --blr "${BLR}" \
+    --epochs "${EPOCHS}" \
+    --num_workers "${NUM_WORKERS}" \
+    --use_amp True \
+    --opt adamwfused \
+    --freeze_npr True \
+    --npr_proj_dim 128 \
+    --npr_branch_dropout 0.3 \
+    --save_ckpt True \
+    --save_ckpt_freq "${SAVE_FREQ}" \
+    "${PY_ARGS[@]}"
+else
+  # Multi-GPU training with torchrun
+  torchrun --nproc_per_node="${NUM_GPUS}" --master_port=29500 main_finetune.py \
+    --model AIDE_3BRANCH \
+    --data_path "${TRAIN_DATA}" \
+    --eval_data_path "${EVAL_DATA}" \
+    --resnet_path "${RESNET_PATH}" \
+    --convnext_path "${CONVNEXT_PATH}" \
+    --npr_path "${NPR_PATH}" \
+    --output_dir "${OUTPUT_DIR}" \
+    --batch_size "${BATCH_SIZE}" \
+    --update_freq "${UPDATE_FREQ}" \
+    --blr "${BLR}" \
+    --epochs "${EPOCHS}" \
+    --num_workers "${NUM_WORKERS}" \
+    --use_amp True \
+    --opt adamwfused \
+    --freeze_npr True \
+    --npr_proj_dim 128 \
+    --npr_branch_dropout 0.3 \
+    --save_ckpt True \
+    --save_ckpt_freq "${SAVE_FREQ}" \
+    "${PY_ARGS[@]}"
+fi
 
 echo "Training finished."
 echo "Output dir: ${OUTPUT_DIR}"
