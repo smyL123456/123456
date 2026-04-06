@@ -31,12 +31,12 @@ if [ "${NUM_GPUS}" -eq 1 ]; then
   NUM_WORKERS=8
 else
   # Multi-GPU: data parallel, no accumulation needed
-  BATCH_SIZE=24
+  BATCH_SIZE=32
   UPDATE_FREQ=1
   NUM_WORKERS=16
 fi
 
-BLR=5e-5
+BLR=6.25e-5
 WARMUP_EPOCHS=2
 EPOCHS=10
 SAVE_FREQ=3
