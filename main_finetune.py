@@ -64,7 +64,13 @@ def get_args_parser():
                         help='Projection dimension for NPR features')
     parser.add_argument('--npr_branch_dropout', default=0.3, type=float,
                         help='Branch-level dropout probability applied to NPR projected features during training')
-    
+    parser.add_argument('--hpf_branch_dropout', default=0.0, type=float,
+                        help='Branch-level dropout probability applied to HPF features during training (0.0-0.5 recommended)')
+    parser.add_argument('--manifold_mixup', type=str2bool, default=False,
+                        help='Enable Manifold Mixup on fused features for cross-domain generalization')
+    parser.add_argument('--manifold_mixup_alpha', default=0.2, type=float,
+                        help='Beta distribution alpha for Manifold Mixup (0.2 recommended)')
+
     # EMA related parameters
     parser.add_argument('--model_ema', type=str2bool, default=False)
     parser.add_argument('--model_ema_decay', type=float, default=0.9999, help='')
@@ -281,7 +287,10 @@ def main(args):
         freeze_npr=args.freeze_npr,
         npr_input_size=args.npr_input_size,
         npr_proj_dim=args.npr_proj_dim,
-        npr_branch_dropout=args.npr_branch_dropout
+        npr_branch_dropout=args.npr_branch_dropout,
+        hpf_branch_dropout=getattr(args, 'hpf_branch_dropout', 0.0),
+        manifold_mixup=getattr(args, 'manifold_mixup', False),
+        manifold_mixup_alpha=getattr(args, 'manifold_mixup_alpha', 0.2),
     )
         
     model.to(device)

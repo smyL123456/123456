@@ -196,6 +196,9 @@ class AIDE_Model(nn.Module):
         npr_proj_dim=128,
         npr_branch_dropout=0.0,
         openclip_model=None,
+        hpf_branch_dropout=0.0,
+        manifold_mixup=False,
+        manifold_mixup_alpha=0.2,
     ):
         super(AIDE_Model, self).__init__()
         self.hpf = HPF()
@@ -246,6 +249,9 @@ class AIDE_Model(nn.Module):
         self.fusion_type = fusion_type
         self.npr_proj_dim = npr_proj_dim
         self.npr_branch_dropout = npr_branch_dropout
+        self.hpf_branch_dropout = hpf_branch_dropout
+        self.manifold_mixup = manifold_mixup
+        self.manifold_mixup_alpha = manifold_mixup_alpha
 
         if fusion_type != 'concat':
             raise ValueError(f'Unsupported fusion_type: {fusion_type}. Only concat is implemented.')
@@ -308,7 +314,36 @@ class AIDE_Model(nn.Module):
         mask = (torch.rand(npr_feat.size(0), 1, device=npr_feat.device) < keep_prob).float()
         return npr_feat * mask / keep_prob
 
-    def forward(self, x):
+    def _apply_hpf_branch_dropout(self, hpf_feat):
+        if (not self.training) or self.hpf_branch_dropout <= 0:
+            return hpf_feat
+
+        keep_prob = 1.0 - self.hpf_branch_dropout
+        if keep_prob <= 0:
+            return torch.zeros_like(hpf_feat)
+
+        mask = (torch.rand(hpf_feat.size(0), 1, device=hpf_feat.device) < keep_prob).float()
+        return hpf_feat * mask / keep_prob
+
+    def _apply_manifold_mixup(self, feat, targets=None):
+        if (not self.training) or (not self.manifold_mixup) or targets is None:
+            return feat, targets
+
+        batch_size = feat.size(0)
+        lam = np.random.beta(self.manifold_mixup_alpha, self.manifold_mixup_alpha)
+        index = torch.randperm(batch_size, device=feat.device)
+
+        mixed_feat = lam * feat + (1 - lam) * feat[index]
+
+        if targets.dim() == 1:
+            targets_a, targets_b = targets, targets[index]
+            mixed_targets = lam * F.one_hot(targets_a, num_classes=2).float() + (1 - lam) * F.one_hot(targets_b, num_classes=2).float()
+        else:
+            mixed_targets = lam * targets + (1 - lam) * targets[index]
+
+        return mixed_feat, mixed_targets
+
+    def forward(self, x, targets=None):
         x_minmin = x[:, 0]
         x_maxmax = x[:, 1]
         x_minmin1 = x[:, 2]
@@ -328,6 +363,8 @@ class AIDE_Model(nn.Module):
         x_max1 = self.model_max(x_maxmax1)
         x_1 = (x_min + x_max + x_min1 + x_max1) / 4
 
+        x_1 = self._apply_hpf_branch_dropout(x_1)
+
         aide_feat = self.aide_fuse_proj(torch.cat([x_0, x_1], dim=1))
 
         if self.use_npr:
@@ -337,7 +374,12 @@ class AIDE_Model(nn.Module):
         else:
             x = aide_feat
 
+        x, targets = self._apply_manifold_mixup(x, targets)
+
         x = self.classifier(x)
+
+        if targets is not None and targets.dim() > 1:
+            return {'logits': x, 'targets': targets}
         return x
 
 
@@ -352,6 +394,9 @@ def AIDE(
     npr_proj_dim=128,
     npr_branch_dropout=0.0,
     openclip_model=None,
+    hpf_branch_dropout=0.0,
+    manifold_mixup=False,
+    manifold_mixup_alpha=0.2,
 ):
     model = AIDE_Model(
         resnet_path=resnet_path,
@@ -364,5 +409,8 @@ def AIDE(
         npr_proj_dim=npr_proj_dim,
         npr_branch_dropout=npr_branch_dropout,
         openclip_model=openclip_model,
+        hpf_branch_dropout=hpf_branch_dropout,
+        manifold_mixup=manifold_mixup,
+        manifold_mixup_alpha=manifold_mixup_alpha,
     )
     return model

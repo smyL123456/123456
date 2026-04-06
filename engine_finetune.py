@@ -27,7 +27,7 @@ import numpy as np
 def train_one_epoch(model: torch.nn.Module, criterion: torch.nn.Module,
                     data_loader: Iterable, optimizer: torch.optim.Optimizer,
                     device: torch.device, epoch: int, loss_scaler, max_norm: float = 0,
-                    model_ema: Optional[ModelEma] = None, mixup_fn: Optional[Mixup] = None, 
+                    model_ema: Optional[ModelEma] = None, mixup_fn: Optional[Mixup] = None,
                     log_writer=None, args=None):
     model.train(True)
     metric_logger = utils.MetricLogger(delimiter="  ")
@@ -52,10 +52,16 @@ def train_one_epoch(model: torch.nn.Module, criterion: torch.nn.Module,
 
         if use_amp:
             with torch.cuda.amp.autocast():
-                output = model(samples)
+                output = model(samples, targets)
+                if isinstance(output, dict):
+                    targets = output['targets']
+                    output = output['logits']
                 loss = criterion(output, targets)
-        else: # full precision
-            output = model(samples)
+        else:
+            output = model(samples, targets)
+            if isinstance(output, dict):
+                targets = output['targets']
+                output = output['logits']
             loss = criterion(output, targets)
 
         loss_value = loss.item()
@@ -83,8 +89,8 @@ def train_one_epoch(model: torch.nn.Module, criterion: torch.nn.Module,
                 optimizer.zero_grad()
                 if model_ema is not None:
                     model_ema.update(model)
-        
-        if mixup_fn is None:
+
+        if mixup_fn is None and targets.dim() == 1:
             class_acc = (output.max(-1)[-1] == targets).float().mean()
         else:
             class_acc = None
@@ -96,7 +102,7 @@ def train_one_epoch(model: torch.nn.Module, criterion: torch.nn.Module,
         for group in optimizer.param_groups:
             min_lr = min(min_lr, group["lr"])
             max_lr = max(max_lr, group["lr"])
-        
+
         metric_logger.update(lr=max_lr)
         metric_logger.update(min_lr=min_lr)
         weight_decay_value = None
@@ -115,7 +121,7 @@ def train_one_epoch(model: torch.nn.Module, criterion: torch.nn.Module,
             if use_amp:
                 log_writer.update(grad_norm=grad_norm, head="opt")
             log_writer.set_step()
-    
+
     # gather the stats from all processes
     metric_logger.synchronize_between_processes()
     print("Averaged stats:", metric_logger)
