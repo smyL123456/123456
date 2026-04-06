@@ -36,7 +36,7 @@ else
   NUM_WORKERS=16
 fi
 
-BLR=9.375e-5
+BLR=3e-5
 WARMUP_EPOCHS=1
 EPOCHS=10
 SAVE_FREQ=1
@@ -98,7 +98,7 @@ if [ "${NUM_GPUS}" -eq 1 ]; then
     --epochs "${EPOCHS}" \
     --num_workers "${NUM_WORKERS}" \
     --use_amp True \
-    --freeze_npr True \
+    --freeze_npr False \
     --npr_proj_dim 128 \
     --npr_branch_dropout 0.5 \
     --save_ckpt True \
@@ -122,7 +122,7 @@ else
     --epochs "${EPOCHS}" \
     --num_workers "${NUM_WORKERS}" \
     --use_amp True \
-    --freeze_npr True \
+    --freeze_npr False \
     --npr_proj_dim 128 \
     --npr_branch_dropout 0.5 \
     --save_ckpt True \
