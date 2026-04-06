@@ -31,15 +31,15 @@ if [ "${NUM_GPUS}" -eq 1 ]; then
   NUM_WORKERS=8
 else
   # Multi-GPU: data parallel, no accumulation needed
-  BATCH_SIZE=32
+  BATCH_SIZE=48
   UPDATE_FREQ=1
   NUM_WORKERS=16
 fi
 
-BLR=6.25e-5
+BLR=9.375e-5
 WARMUP_EPOCHS=1
 EPOCHS=10
-SAVE_FREQ=3
+SAVE_FREQ=1
 WEIGHT_DECAY=0.05
 
 PY_ARGS=("$@")
