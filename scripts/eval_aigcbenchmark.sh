@@ -13,7 +13,7 @@ set -euo pipefail
 
 # Default paths (from train_3branch.sh)
 DEFAULT_MODE="3branch"
-DEFAULT_CKPT="/AIGCDetect/models/123456/results/checkpoint-best.pth"
+DEFAULT_CKPT="/AIGCDetect/models/123456/results/3branch_train/checkpoint-best.pth"
 DEFAULT_TRAIN="/data/CNNSpot/progan_train"
 DEFAULT_TEST="/data/default/AIGCDetectionBenchmark/test"
 
@@ -42,8 +42,17 @@ cd "${REPO_DIR}"
 
 CONVNEXT_PATH="/AIGCDetect/models/123456/pretrained_ckpts/open_clip_pytorch_model.bin"
 NPR_PATH="/AIGCDetect/models/123456/pretrained_ckpts/NPR.pth"
-BATCH_SIZE=24
-NUM_WORKERS=16
+
+# GPU configuration (set NUM_GPUS=2 for dual-GPU evaluation)
+NUM_GPUS=${NUM_GPUS:-1}
+
+if [ "${NUM_GPUS}" -eq 1 ]; then
+  BATCH_SIZE=24
+  NUM_WORKERS=16
+else
+  BATCH_SIZE=32
+  NUM_WORKERS=16
+fi
 
 if [ ! -f "${CKPT_PATH}" ]; then
   echo "[ERROR] checkpoint not found: ${CKPT_PATH}"
@@ -91,20 +100,38 @@ echo "  Model:       ${MODEL}"
 echo "  Checkpoint:  ${CKPT_PATH}"
 echo "  Test set:    ${AIGC_BENCHMARK}"
 echo "  Output dir:  ${OUTPUT_DIR}"
+echo "  GPUs:        ${NUM_GPUS}"
+echo "  Batch size:  ${BATCH_SIZE}"
 echo "=============================="
 
-python main_finetune.py \
-  --model "${MODEL}" \
-  --eval True \
-  --resume "${CKPT_PATH}" \
-  --convnext_path "${CONVNEXT_PATH}" \
-  "${EXTRA_MODEL_ARGS[@]}" \
-  --data_path "${TRAIN_DATA}" \
-  --eval_data_path "${AIGC_BENCHMARK}" \
-  --output_dir "${OUTPUT_DIR}" \
-  --batch_size "${BATCH_SIZE}" \
-  --num_workers "${NUM_WORKERS}" \
-  --use_amp True \
-  "${PY_ARGS[@]}"
+if [ "${NUM_GPUS}" -eq 1 ]; then
+  python main_finetune.py \
+    --model "${MODEL}" \
+    --eval True \
+    --resume "${CKPT_PATH}" \
+    --convnext_path "${CONVNEXT_PATH}" \
+    "${EXTRA_MODEL_ARGS[@]}" \
+    --data_path "${TRAIN_DATA}" \
+    --eval_data_path "${AIGC_BENCHMARK}" \
+    --output_dir "${OUTPUT_DIR}" \
+    --batch_size "${BATCH_SIZE}" \
+    --num_workers "${NUM_WORKERS}" \
+    --use_amp True \
+    "${PY_ARGS[@]}"
+else
+  torchrun --nproc_per_node="${NUM_GPUS}" --master_port=29500 main_finetune.py \
+    --model "${MODEL}" \
+    --eval True \
+    --resume "${CKPT_PATH}" \
+    --convnext_path "${CONVNEXT_PATH}" \
+    "${EXTRA_MODEL_ARGS[@]}" \
+    --data_path "${TRAIN_DATA}" \
+    --eval_data_path "${AIGC_BENCHMARK}" \
+    --output_dir "${OUTPUT_DIR}" \
+    --batch_size "${BATCH_SIZE}" \
+    --num_workers "${NUM_WORKERS}" \
+    --use_amp True \
+    "${PY_ARGS[@]}"
+fi
 
 echo "Evaluation finished. CSV saved in: ${OUTPUT_DIR}/"
