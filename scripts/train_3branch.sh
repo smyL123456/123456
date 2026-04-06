@@ -26,12 +26,12 @@ NUM_GPUS=${NUM_GPUS:-1}
 # Training hyperparameters (optimized for RTX 4090).
 if [ "${NUM_GPUS}" -eq 1 ]; then
   # Single GPU: use gradient accumulation
-  BATCH_SIZE=8
+  BATCH_SIZE=16
   UPDATE_FREQ=2
   NUM_WORKERS=8
 else
   # Multi-GPU: data parallel, no accumulation needed
-  BATCH_SIZE=8
+  BATCH_SIZE=24
   UPDATE_FREQ=1
   NUM_WORKERS=16
 fi
