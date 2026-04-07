@@ -171,6 +171,8 @@ def get_args_parser():
     parser.add_argument('--data_set', default='IMNET', choices=['CIFAR', 'IMNET', 'image_folder'],
                         type=str, help='ImageNet dataset path')
     parser.add_argument('--auto_resume', type=str2bool, default=True)
+    parser.add_argument('--resume_weights_only', type=str2bool, default=False,
+                        help='Only load model weights, skip optimizer state (use when changing freeze_npr)')
     parser.add_argument('--save_ckpt', type=str2bool, default=True)
     parser.add_argument('--save_ckpt_freq', default=1, type=int)
     parser.add_argument('--save_ckpt_num', default=100, type=int)

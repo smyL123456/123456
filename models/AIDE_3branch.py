@@ -256,17 +256,15 @@ class AIDE_Model(nn.Module):
         if fusion_type != 'concat':
             raise ValueError(f'Unsupported fusion_type: {fusion_type}. Only concat is implemented.')
 
-        # Preserve original AIDE 2-branch fused representation first.
-        self.aide_fuse_proj = nn.Sequential(
-            nn.Linear(2048 + 256, 1024),
-            nn.GELU(),
-        )
-
         if self.use_npr:
             self.npr_branch = build_npr_feature_extractor(checkpoint_path=npr_path, freeze=freeze_npr)
-            self.npr_proj = nn.Linear(512, npr_proj_dim)
-            classifier_in_dim = 1024 + npr_proj_dim
+            classifier_in_dim = 2048 + 256 + 512
         else:
+            # Preserve original AIDE 2-branch fused representation.
+            self.aide_fuse_proj = nn.Sequential(
+                nn.Linear(2048 + 256, 1024),
+                nn.GELU(),
+            )
             classifier_in_dim = 1024
 
         self.classifier = Mlp(classifier_in_dim, 512, 2)
@@ -297,11 +295,9 @@ class AIDE_Model(nn.Module):
 
         if self.freeze_npr:
             with torch.no_grad():
-                npr_feat = self.npr_branch(npr_tokens)
+                return self.npr_branch(npr_tokens)
         else:
-            npr_feat = self.npr_branch(npr_tokens)
-
-        return self.npr_proj(npr_feat)
+            return self.npr_branch(npr_tokens)
 
     def _apply_npr_branch_dropout(self, npr_feat):
         if (not self.training) or self.npr_branch_dropout <= 0:
@@ -365,14 +361,12 @@ class AIDE_Model(nn.Module):
 
         x_1 = self._apply_hpf_branch_dropout(x_1)
 
-        aide_feat = self.aide_fuse_proj(torch.cat([x_0, x_1], dim=1))
-
         if self.use_npr:
             x_npr = self._extract_npr_feature(tokens)
             x_npr = self._apply_npr_branch_dropout(x_npr)
-            x = torch.cat([aide_feat, x_npr], dim=1)
+            x = torch.cat([x_0, x_1, x_npr], dim=1)
         else:
-            x = aide_feat
+            x = self.aide_fuse_proj(torch.cat([x_0, x_1], dim=1))
 
         x, targets = self._apply_manifold_mixup(x, targets)
 
