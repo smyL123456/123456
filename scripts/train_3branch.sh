@@ -27,18 +27,18 @@ NUM_GPUS=${NUM_GPUS:-1}
 if [ "${NUM_GPUS}" -eq 1 ]; then
   # Single GPU: use gradient accumulation
   BATCH_SIZE=16
-  UPDATE_FREQ=2
+  UPDATE_FREQ=6
   NUM_WORKERS=8
 else
-  # Multi-GPU: data parallel, no accumulation needed
+  # Multi-GPU: data parallel with gradient accumulation
   BATCH_SIZE=48
-  UPDATE_FREQ=1
+  UPDATE_FREQ=2
   NUM_WORKERS=16
 fi
 
-BLR=3e-5
+BLR=7.5e-5
 WARMUP_EPOCHS=1
-EPOCHS=10
+EPOCHS=6
 SAVE_FREQ=1
 WEIGHT_DECAY=0.05
 
