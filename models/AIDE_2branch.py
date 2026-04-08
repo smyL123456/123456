@@ -229,7 +229,8 @@ class AIDE2BranchModel(nn.Module):
                 tokens * (dinov2_std / clip_std) + (dinov2_mean - clip_mean) / clip_std
             )
             local_convnext_image_feats = self.avgpool(local_convnext_image_feats).view(tokens.size(0), -1)
-            x_0 = self.convnext_proj(local_convnext_image_feats)
+        # convnext_proj is trainable — apply outside no_grad so gradients flow
+        x_0 = self.convnext_proj(local_convnext_image_feats)
 
         x_min = self.model_min(x_minmin)
         x_max = self.model_max(x_maxmax)

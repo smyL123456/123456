@@ -42,6 +42,7 @@ WARMUP_EPOCHS=1
 EPOCHS=6
 SAVE_FREQ=1
 WEIGHT_DECAY=0.05
+NPR_LR_SCALE=0.1       # NPR backbone trains at 10% of the main LR
 
 # Cross-domain generalization settings
 MANIFOLD_MIXUP=True
@@ -117,6 +118,7 @@ if [ "${NUM_GPUS}" -eq 1 ]; then
     --hpf_branch_dropout "${HPF_BRANCH_DROPOUT}" \
     --manifold_mixup "${MANIFOLD_MIXUP}" \
     --manifold_mixup_alpha "${MANIFOLD_MIXUP_ALPHA}" \
+    --npr_lr_scale "${NPR_LR_SCALE}" \
     --save_ckpt True \
     --save_ckpt_freq "${SAVE_FREQ}" \
     "${PY_ARGS[@]}"
@@ -144,6 +146,7 @@ else
     --hpf_branch_dropout "${HPF_BRANCH_DROPOUT}" \
     --manifold_mixup "${MANIFOLD_MIXUP}" \
     --manifold_mixup_alpha "${MANIFOLD_MIXUP_ALPHA}" \
+    --npr_lr_scale "${NPR_LR_SCALE}" \
     --save_ckpt True \
     --save_ckpt_freq "${SAVE_FREQ}" \
     "${PY_ARGS[@]}"

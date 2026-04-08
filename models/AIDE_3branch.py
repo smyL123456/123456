@@ -1,4 +1,4 @@
-﻿import torch
+import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from .srm_filter_kernel import all_normalized_hpf_list
@@ -184,6 +184,21 @@ class Mlp(nn.Module):
 
 
 class AIDE_Model(nn.Module):
+    """
+    AIDE detector: 2-branch baseline or 3-branch (+ NPR) variant.
+
+    Fusion architecture (use_npr=True):
+        HPF (2048) ─┐
+                    ├─→ hpf_sem_fuse: Linear(2304→1024)+GELU ─┐
+        SEM (256)  ─┘                                          ├─→ Linear(1152→512)+GELU → Linear(512→2)
+                                          NPR (512→128 proj) ──┘
+
+    Fusion architecture (use_npr=False) — identical to AIDE_2BRANCH:
+        HPF (2048) ─┐
+                    ├─→ Mlp(2304→1024→2)
+        SEM (256)  ─┘
+    """
+
     def __init__(
         self,
         resnet_path,
@@ -241,6 +256,8 @@ class AIDE_Model(nn.Module):
             param.requires_grad = False
 
         self.avgpool = nn.AdaptiveAvgPool2d((1, 1))
+        # convnext_proj is trainable (outside no_grad) so that the semantic
+        # projection adapts during fine-tuning, matching AIDE_2BRANCH behaviour.
         self.convnext_proj = nn.Linear(3072, 256)
 
         self.use_npr = use_npr
@@ -256,20 +273,34 @@ class AIDE_Model(nn.Module):
         if fusion_type != 'concat':
             raise ValueError(f'Unsupported fusion_type: {fusion_type}. Only concat is implemented.')
 
-        if self.use_npr:
-            self.npr_branch = build_npr_feature_extractor(checkpoint_path=npr_path, freeze=freeze_npr)
-            classifier_in_dim = 2048 + 256 + 512
-        else:
-            # Preserve original AIDE 2-branch fused representation.
-            self.aide_fuse_proj = nn.Sequential(
-                nn.Linear(2048 + 256, 1024),
-                nn.GELU(),
-            )
-            classifier_in_dim = 1024
+        # Stage-1 fusion: HPF + Semantic → 1024-dim shared representation.
+        # This sub-graph is identical to the AIDE_2BRANCH fusion projection,
+        # ensuring that the 2-branch path is exactly reproduced when use_npr=False.
+        self.hpf_sem_fuse = nn.Sequential(
+            nn.Linear(2048 + 256, 1024),
+            nn.GELU(),
+        )
 
-        self.classifier = Mlp(classifier_in_dim, 512, 2)
+        if self.use_npr:
+            # NPR branch + its own 512→npr_proj_dim linear projection
+            self.npr_branch = build_npr_feature_extractor(checkpoint_path=npr_path, freeze=freeze_npr)
+            self.npr_proj = nn.Linear(512, npr_proj_dim)
+            # Stage-2 classifier: [1024 + npr_proj_dim] → 2
+            self.classifier = Mlp(1024 + npr_proj_dim, 512, 2)
+        else:
+            # 2-branch path: direct classifier on 1024-dim fused features.
+            # Mlp(1024, 1024, 2) with hidden=1024 is the same as Linear(1024→1024)+GELU+Linear(1024→2).
+            # To be fully identical to AIDE_2BRANCH (Mlp(2304,1024,2) = Linear+GELU+Linear)
+            # we use a single linear layer here because hpf_sem_fuse already applies
+            # the Linear(2304→1024)+GELU step.
+            self.classifier = nn.Linear(1024, 2)
+
+    # ------------------------------------------------------------------
+    # Feature extraction helpers
+    # ------------------------------------------------------------------
 
     def _extract_convnext_feature(self, tokens):
+        """Extract frozen ConvNeXt-XXL features, then apply trainable projection."""
         with torch.no_grad():
             clip_mean = torch.Tensor([0.48145466, 0.4578275, 0.40821073]).to(tokens, non_blocking=True).view(3, 1, 1)
             clip_std = torch.Tensor([0.26862954, 0.26130258, 0.27577711]).to(tokens, non_blocking=True).view(3, 1, 1)
@@ -281,9 +312,11 @@ class AIDE_Model(nn.Module):
             )
             local_convnext_image_feats = self.avgpool(local_convnext_image_feats).view(tokens.size(0), -1)
 
+        # convnext_proj is trainable — gradients flow here
         return self.convnext_proj(local_convnext_image_feats)
 
     def _extract_npr_feature(self, tokens):
+        """Run NPR backbone (optionally frozen) then apply trainable projection."""
         npr_tokens = tokens
         if self.npr_input_size is not None and npr_tokens.shape[-1] != self.npr_input_size:
             npr_tokens = F.interpolate(
@@ -295,9 +328,16 @@ class AIDE_Model(nn.Module):
 
         if self.freeze_npr:
             with torch.no_grad():
-                return self.npr_branch(npr_tokens)
+                feat = self.npr_branch(npr_tokens)
         else:
-            return self.npr_branch(npr_tokens)
+            feat = self.npr_branch(npr_tokens)
+
+        # npr_proj is always trainable
+        return self.npr_proj(feat)
+
+    # ------------------------------------------------------------------
+    # Regularisation helpers (training-only)
+    # ------------------------------------------------------------------
 
     def _apply_npr_branch_dropout(self, npr_feat):
         if (not self.training) or self.npr_branch_dropout <= 0:
@@ -333,48 +373,61 @@ class AIDE_Model(nn.Module):
 
         if targets.dim() == 1:
             targets_a, targets_b = targets, targets[index]
-            mixed_targets = lam * F.one_hot(targets_a, num_classes=2).float() + (1 - lam) * F.one_hot(targets_b, num_classes=2).float()
+            mixed_targets = (
+                lam * F.one_hot(targets_a, num_classes=2).float()
+                + (1 - lam) * F.one_hot(targets_b, num_classes=2).float()
+            )
         else:
             mixed_targets = lam * targets + (1 - lam) * targets[index]
 
         return mixed_feat, mixed_targets
 
+    # ------------------------------------------------------------------
+    # Forward
+    # ------------------------------------------------------------------
+
     def forward(self, x, targets=None):
-        x_minmin = x[:, 0]
-        x_maxmax = x[:, 1]
+        x_minmin  = x[:, 0]
+        x_maxmax  = x[:, 1]
         x_minmin1 = x[:, 2]
         x_maxmax1 = x[:, 3]
-        tokens = x[:, 4]
+        tokens    = x[:, 4]
 
-        x_minmin = self.hpf(x_minmin)
-        x_maxmax = self.hpf(x_maxmax)
+        # HPF branch
+        x_minmin  = self.hpf(x_minmin)
+        x_maxmax  = self.hpf(x_maxmax)
         x_minmin1 = self.hpf(x_minmin1)
         x_maxmax1 = self.hpf(x_maxmax1)
 
-        x_0 = self._extract_convnext_feature(tokens)
-
-        x_min = self.model_min(x_minmin)
-        x_max = self.model_max(x_maxmax)
+        x_min  = self.model_min(x_minmin)
+        x_max  = self.model_max(x_maxmax)
         x_min1 = self.model_min(x_minmin1)
         x_max1 = self.model_max(x_maxmax1)
-        x_1 = (x_min + x_max + x_min1 + x_max1) / 4
+        x_hpf  = (x_min + x_max + x_min1 + x_max1) / 4          # (B, 2048)
+        x_hpf  = self._apply_hpf_branch_dropout(x_hpf)
 
-        x_1 = self._apply_hpf_branch_dropout(x_1)
+        # Semantic branch
+        x_sem = self._extract_convnext_feature(tokens)            # (B, 256)
+
+        # Stage-1 fusion: HPF + Semantic → (B, 1024)
+        x_fused = self.hpf_sem_fuse(torch.cat([x_sem, x_hpf], dim=1))
 
         if self.use_npr:
+            # NPR branch → (B, npr_proj_dim)
             x_npr = self._extract_npr_feature(tokens)
             x_npr = self._apply_npr_branch_dropout(x_npr)
-            x = torch.cat([x_0, x_1, x_npr], dim=1)
+
+            # Stage-2 fusion: [fused, npr] → (B, 1024+npr_proj_dim)
+            x_cat = torch.cat([x_fused, x_npr], dim=1)
+            x_cat, targets = self._apply_manifold_mixup(x_cat, targets)
+            out = self.classifier(x_cat)
         else:
-            x = self.aide_fuse_proj(torch.cat([x_0, x_1], dim=1))
-
-        x, targets = self._apply_manifold_mixup(x, targets)
-
-        x = self.classifier(x)
+            x_fused, targets = self._apply_manifold_mixup(x_fused, targets)
+            out = self.classifier(x_fused)
 
         if targets is not None and targets.dim() > 1:
-            return {'logits': x, 'targets': targets}
-        return x
+            return {'logits': out, 'targets': targets}
+        return out
 
 
 def AIDE(
@@ -392,7 +445,7 @@ def AIDE(
     manifold_mixup=False,
     manifold_mixup_alpha=0.2,
 ):
-    model = AIDE_Model(
+    return AIDE_Model(
         resnet_path=resnet_path,
         convnext_path=convnext_path,
         use_npr=use_npr,
@@ -407,4 +460,3 @@ def AIDE(
         manifold_mixup=manifold_mixup,
         manifold_mixup_alpha=manifold_mixup_alpha,
     )
-    return model
