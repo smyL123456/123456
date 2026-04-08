@@ -208,7 +208,7 @@ class AIDE2BranchModel(nn.Module):
         self.convnext_proj = nn.Linear(3072, 256)
         self.fc = Mlp(2048 + 256, 1024, 2)
 
-    def forward(self, x):
+    def forward(self, x, targets=None):
         x_minmin = x[:, 0]
         x_maxmax = x[:, 1]
         x_minmin1 = x[:, 2]
