@@ -17,20 +17,20 @@ RESNET_PATH="/AIGCDetect/models/123456/pretrained_ckpts/resnet50.pth"
 CONVNEXT_PATH="/AIGCDetect/models/123456/pretrained_ckpts/open_clip_pytorch_model.bin"
 OUTPUT_DIR="/AIGCDetect/models/123456/results/2branch_train"
 
-NUM_GPUS=${NUM_GPUS:-1}
+NUM_GPUS=${NUM_GPUS:-2}
 
 if [ "${NUM_GPUS}" -eq 1 ]; then
-  BATCH_SIZE=16
-  UPDATE_FREQ=6
+  BATCH_SIZE=32
+  UPDATE_FREQ=8
   NUM_WORKERS=8
 else
-  BATCH_SIZE=48
-  UPDATE_FREQ=2
-  NUM_WORKERS=16
+  BATCH_SIZE=32
+  UPDATE_FREQ=4
+  NUM_WORKERS=8
 fi
 
-BLR=7.5e-5
-EPOCHS=6
+BLR=1e-4
+EPOCHS=5
 WARMUP_EPOCHS=1
 WEIGHT_DECAY=0.05
 SAVE_FREQ=1

@@ -21,22 +21,20 @@ NPR_PATH="/AIGCDetect/models/123456/pretrained_ckpts/NPR.pth"
 OUTPUT_DIR="/AIGCDetect/models/123456/results"
 
 # GPU configuration (set NUM_GPUS=2 for dual-GPU training).
-NUM_GPUS=${NUM_GPUS:-1}
+NUM_GPUS=${NUM_GPUS:-2}
 
-# Training hyperparameters (optimized for RTX 4090).
+# Training hyperparameters (dual RTX 4090, effective batch=256).
 if [ "${NUM_GPUS}" -eq 1 ]; then
-  # Single GPU: use gradient accumulation
-  BATCH_SIZE=16
-  UPDATE_FREQ=6
+  BATCH_SIZE=32
+  UPDATE_FREQ=8
   NUM_WORKERS=8
 else
-  # Multi-GPU: data parallel with gradient accumulation
-  BATCH_SIZE=48
-  UPDATE_FREQ=2
-  NUM_WORKERS=16
+  BATCH_SIZE=32
+  UPDATE_FREQ=4
+  NUM_WORKERS=8
 fi
 
-BLR=7.5e-5
+BLR=1e-4
 WARMUP_EPOCHS=2
 EPOCHS=10
 SAVE_FREQ=1
