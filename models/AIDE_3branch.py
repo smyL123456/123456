@@ -256,8 +256,6 @@ class AIDE_Model(nn.Module):
             param.requires_grad = False
 
         self.avgpool = nn.AdaptiveAvgPool2d((1, 1))
-        # convnext_proj is trainable (outside no_grad) so that the semantic
-        # projection adapts during fine-tuning, matching AIDE_2BRANCH behaviour.
         self.convnext_proj = nn.Linear(3072, 256)
 
         self.use_npr = use_npr
@@ -300,7 +298,7 @@ class AIDE_Model(nn.Module):
     # ------------------------------------------------------------------
 
     def _extract_convnext_feature(self, tokens):
-        """Extract frozen ConvNeXt-XXL features, then apply trainable projection."""
+        """Extract frozen ConvNeXt-XXL features and apply projection (both frozen via no_grad)."""
         with torch.no_grad():
             clip_mean = torch.Tensor([0.48145466, 0.4578275, 0.40821073]).to(tokens, non_blocking=True).view(3, 1, 1)
             clip_std = torch.Tensor([0.26862954, 0.26130258, 0.27577711]).to(tokens, non_blocking=True).view(3, 1, 1)
@@ -311,9 +309,7 @@ class AIDE_Model(nn.Module):
                 tokens * (dinov2_std / clip_std) + (dinov2_mean - clip_mean) / clip_std
             )
             local_convnext_image_feats = self.avgpool(local_convnext_image_feats).view(tokens.size(0), -1)
-
-        # convnext_proj is trainable — gradients flow here
-        return self.convnext_proj(local_convnext_image_feats)
+            return self.convnext_proj(local_convnext_image_feats)
 
     def _extract_npr_feature(self, tokens):
         """Run NPR backbone (optionally frozen) then apply trainable projection."""

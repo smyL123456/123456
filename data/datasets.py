@@ -27,9 +27,8 @@ ImageFile.LOAD_TRUNCATED_IMAGES = True
 import kornia.augmentation as K
 
 Perturbations = K.container.ImageSequential(
-    K.RandomGaussianBlur(kernel_size=(3, 3), sigma=(0.1, 3.0), p=0.3),
-    K.RandomJPEG(jpeg_quality=(30, 100), p=0.3),
-    K.ColorJitter(brightness=0.2, contrast=0.2, saturation=0.2, hue=0.1, p=0.2)
+    K.RandomGaussianBlur(kernel_size=(3, 3), sigma=(0.1, 3.0), p=0.1),
+    K.RandomJPEG(jpeg_quality=(30, 100), p=0.1)
 )
 
 transform_before = transforms.Compose([
