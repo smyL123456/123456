@@ -70,8 +70,6 @@ def get_args_parser():
                         help='Enable Manifold Mixup on fused features for cross-domain generalization')
     parser.add_argument('--manifold_mixup_alpha', default=0.2, type=float,
                         help='Beta distribution alpha for Manifold Mixup (0.2 recommended)')
-    parser.add_argument('--npr_lr_scale', default=0.1, type=float,
-                        help='LR multiplier for NPR backbone params when freeze_npr=False (default 0.1 protects pretrained weights)')
 
     # EMA related parameters
     parser.add_argument('--model_ema', type=str2bool, default=False)
@@ -191,8 +189,9 @@ def get_args_parser():
     parser.add_argument('--pin_mem', type=str2bool, default=True,
                         help='Pin CPU memory in DataLoader for more efficient (sometimes) transfer to GPU.')
 
-    # Evaluation parameters
-    parser.add_argument('--crop_pct', type=float, default=None)
+    parser.add_argument('--eval_subsets', default=None, type=str,
+                        help='Comma-separated list of generator names to evaluate (e.g. ADM,VQDM,stargan). '
+                             'If not set, all subsets in eval_data_path are evaluated.')
 
     # distributed training parameters
     parser.add_argument('--world_size', default=1, type=int,
@@ -333,48 +332,10 @@ def main(args):
         model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[args.gpu], find_unused_parameters=True)
         model_without_ddp = model.module
 
-    # When freeze_npr=False the NPR backbone has pretrained weights that should
-    # be fine-tuned at a much lower LR than the freshly-initialised fusion /
-    # classifier layers.  We split parameters into two groups here so that
-    # create_optimizer receives explicit per-group LRs, bypassing the need to
-    # change optim_factory.py.
-    npr_lr_scale = getattr(args, 'npr_lr_scale', 0.1)
-    use_npr_and_unfrozen = (
-        args.model in ['AIDE_3BRANCH', 'AIDE', 'AIDE_NPR']
-        and not args.freeze_npr
-    )
-    if use_npr_and_unfrozen and npr_lr_scale != 1.0:
-        npr_backbone_params, other_params = [], []
-        for name, param in model_without_ddp.named_parameters():
-            if not param.requires_grad:
-                continue
-            if 'npr_branch.' in name:
-                npr_backbone_params.append(param)
-            else:
-                other_params.append(param)
-        # Temporarily set args.lr so create_optimizer uses the correct base LR,
-        # then we patch the NPR group's LR after creation.
-        optimizer = create_optimizer(
-            args, model_without_ddp, skip_list=None,
-            get_num_layer=assigner.get_layer_id if assigner is not None else None,
-            get_layer_scale=assigner.get_scale if assigner is not None else None)
-        # Patch: add an explicit lower-LR group for NPR backbone params.
-        # We remove those params from their existing group(s) and add a new group.
-        npr_param_set = set(id(p) for p in npr_backbone_params)
-        for group in optimizer.param_groups:
-            group['params'] = [p for p in group['params'] if id(p) not in npr_param_set]
-        optimizer.add_param_group({
-            'params': npr_backbone_params,
-            'lr': args.lr * npr_lr_scale,
-            'weight_decay': args.weight_decay,
-            'name': 'npr_backbone',
-        })
-        print(f"NPR backbone LR: {args.lr * npr_lr_scale:.2e}  (base × {npr_lr_scale})")
-    else:
-        optimizer = create_optimizer(
-            args, model_without_ddp, skip_list=None,
-            get_num_layer=assigner.get_layer_id if assigner is not None else None,
-            get_layer_scale=assigner.get_scale if assigner is not None else None)
+    optimizer = create_optimizer(
+        args, model_without_ddp, skip_list=None,
+        get_num_layer=assigner.get_layer_id if assigner is not None else None,
+        get_layer_scale=assigner.get_scale if assigner is not None else None)
     loss_scaler = NativeScaler()
 
     if mixup_fn is not None or getattr(args, 'manifold_mixup', False):
@@ -399,6 +360,11 @@ def main(args):
             vals = ["progan", "stylegan", "biggan", "cyclegan", "stargan", "gaugan", "stylegan2", "whichfaceisreal", "ADM", "Glide", "Midjourney", "stable_diffusion_v_1_4", "stable_diffusion_v_1_5", "VQDM", "wukong", "DALLE2"]
         if len(vals) == 8:
             vals = ["Midjourney", "stable_diffusion_v_1_4", "stable_diffusion_v_1_5", "ADM", "glide", "wukong", "VQDM", "BigGAN"]
+        if args.eval_subsets:
+            subsets = [s.strip() for s in args.eval_subsets.split(',')]
+            vals = [v for v in vals if v in subsets]
+            if not vals:
+                raise ValueError(f'--eval_subsets "{args.eval_subsets}" matched no entries in {args.eval_data_path}')
         eval_data_path = args.eval_data_path
 
         rows = [["{} model testing on...".format(args.resume)],

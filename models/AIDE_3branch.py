@@ -281,7 +281,7 @@ class AIDE_Model(nn.Module):
 
         if self.use_npr:
             # NPR branch + its own 512→npr_proj_dim linear projection
-            self.npr_branch = build_npr_feature_extractor(checkpoint_path=npr_path, freeze=freeze_npr)
+            self.npr_branch = build_npr_feature_extractor(checkpoint_path=npr_path, freeze=freeze_npr, skip_pretrained=True)
             self.npr_proj = nn.Linear(512, npr_proj_dim)
             # Stage-2 classifier: [1024 + npr_proj_dim] → 2
             self.classifier = Mlp(1024 + npr_proj_dim, 512, 2)

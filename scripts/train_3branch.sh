@@ -37,11 +37,10 @@ else
 fi
 
 BLR=7.5e-5
-WARMUP_EPOCHS=1
-EPOCHS=6
+WARMUP_EPOCHS=2
+EPOCHS=10
 SAVE_FREQ=1
 WEIGHT_DECAY=0.05
-NPR_LR_SCALE=0.1       # NPR backbone trains at 10% of the main LR
 NPR_BRANCH_DROPOUT=0.3 # reduced from 0.5 for more stable convergence
 
 PY_ARGS=("$@")
@@ -103,7 +102,6 @@ if [ "${NUM_GPUS}" -eq 1 ]; then
     --freeze_npr False \
     --npr_proj_dim 128 \
     --npr_branch_dropout "${NPR_BRANCH_DROPOUT}" \
-    --npr_lr_scale "${NPR_LR_SCALE}" \
     --save_ckpt True \
     --save_ckpt_freq "${SAVE_FREQ}" \
     "${PY_ARGS[@]}"
@@ -128,7 +126,6 @@ else
     --freeze_npr False \
     --npr_proj_dim 128 \
     --npr_branch_dropout "${NPR_BRANCH_DROPOUT}" \
-    --npr_lr_scale "${NPR_LR_SCALE}" \
     --save_ckpt True \
     --save_ckpt_freq "${SAVE_FREQ}" \
     "${PY_ARGS[@]}"

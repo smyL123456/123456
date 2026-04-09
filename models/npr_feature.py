@@ -171,10 +171,10 @@ def load_npr_weights(model, checkpoint_path):
     )
 
 
-def build_npr_feature_extractor(checkpoint_path=None, freeze=True):
+def build_npr_feature_extractor(checkpoint_path=None, freeze=True, skip_pretrained=False):
     model = NPRResNetFeature(Bottleneck, [3, 4, 6, 3])
 
-    if checkpoint_path:
+    if checkpoint_path and not skip_pretrained:
         load_npr_weights(model, checkpoint_path)
 
     if freeze:
