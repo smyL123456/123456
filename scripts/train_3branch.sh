@@ -35,8 +35,8 @@ else
 fi
 
 BLR=1e-4
-WARMUP_EPOCHS=2
-EPOCHS=20
+WARMUP_EPOCHS=1
+EPOCHS=10
 SAVE_FREQ=3
 WEIGHT_DECAY=0.05
 NPR_BRANCH_DROPOUT=0.3 # reduced from 0.5 for more stable convergence
