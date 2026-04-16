@@ -36,7 +36,7 @@ fi
 
 BLR=1e-4
 WARMUP_EPOCHS=2
-EPOCHS=10
+EPOCHS=20
 SAVE_FREQ=1
 WEIGHT_DECAY=0.05
 NPR_BRANCH_DROPOUT=0.3 # reduced from 0.5 for more stable convergence
@@ -98,6 +98,7 @@ if [ "${NUM_GPUS}" -eq 1 ]; then
     --num_workers "${NUM_WORKERS}" \
     --use_amp True \
     --freeze_npr False \
+    --skip_pretrained False \
     --npr_proj_dim 128 \
     --npr_branch_dropout "${NPR_BRANCH_DROPOUT}" \
     --save_ckpt True \
@@ -122,6 +123,7 @@ else
     --num_workers "${NUM_WORKERS}" \
     --use_amp True \
     --freeze_npr False \
+    --skip_pretrained False \
     --npr_proj_dim 128 \
     --npr_branch_dropout "${NPR_BRANCH_DROPOUT}" \
     --save_ckpt True \

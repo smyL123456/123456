@@ -214,6 +214,7 @@ class AIDE_Model(nn.Module):
         hpf_branch_dropout=0.0,
         manifold_mixup=False,
         manifold_mixup_alpha=0.2,
+        skip_pretrained=False,
     ):
         super(AIDE_Model, self).__init__()
         self.hpf = HPF()
@@ -281,7 +282,7 @@ class AIDE_Model(nn.Module):
 
         if self.use_npr:
             # NPR branch + its own 512→npr_proj_dim linear projection
-            self.npr_branch = build_npr_feature_extractor(checkpoint_path=npr_path, freeze=freeze_npr, skip_pretrained=True)
+            self.npr_branch = build_npr_feature_extractor(checkpoint_path=npr_path, freeze=freeze_npr, skip_pretrained=skip_pretrained)
             self.npr_proj = nn.Linear(512, npr_proj_dim)
             # Stage-2 classifier: [1024 + npr_proj_dim] → 2
             self.classifier = Mlp(1024 + npr_proj_dim, 512, 2)
@@ -440,6 +441,7 @@ def AIDE(
     hpf_branch_dropout=0.0,
     manifold_mixup=False,
     manifold_mixup_alpha=0.2,
+    skip_pretrained=False,
 ):
     return AIDE_Model(
         resnet_path=resnet_path,
@@ -455,4 +457,5 @@ def AIDE(
         hpf_branch_dropout=hpf_branch_dropout,
         manifold_mixup=manifold_mixup,
         manifold_mixup_alpha=manifold_mixup_alpha,
+        skip_pretrained=skip_pretrained,
     )

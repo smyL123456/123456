@@ -62,6 +62,8 @@ def get_args_parser():
                         help='Input size for NPR branch')
     parser.add_argument('--npr_proj_dim', default=128, type=int,
                         help='Projection dimension for NPR features')
+    parser.add_argument('--skip_pretrained', type=str2bool, default=False,
+                        help='Skip loading NPR pretrained weights (use True to train NPR from scratch)')
     parser.add_argument('--npr_branch_dropout', default=0.3, type=float,
                         help='Branch-level dropout probability applied to NPR projected features during training')
     parser.add_argument('--hpf_branch_dropout', default=0.0, type=float,
@@ -294,6 +296,7 @@ def main(args):
         hpf_branch_dropout=getattr(args, 'hpf_branch_dropout', 0.0),
         manifold_mixup=getattr(args, 'manifold_mixup', False),
         manifold_mixup_alpha=getattr(args, 'manifold_mixup_alpha', 0.2),
+        skip_pretrained=getattr(args, 'skip_pretrained', False),
     )
         
     model.to(device)
