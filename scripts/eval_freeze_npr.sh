@@ -38,7 +38,7 @@ NUM_GPUS=${NUM_GPUS:-1}
 BATCH_SIZE=${BATCH_SIZE:-24}
 
 # Specify which datasets to evaluate (SD1.4, Midjourney, ADM)
-EVAL_DATASETS="stable_diffusion_v_1_4,Midjourney,wukong"
+EVAL_SUBSETS="stable_diffusion_v_1_4,Midjourney,wukong"
 
 mkdir -p "${OUTPUT_DIR}"
 
