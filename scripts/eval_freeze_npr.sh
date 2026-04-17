@@ -46,7 +46,7 @@ echo "=============================="
 echo "Freeze-NPR eval (SD1.4, MJ, ADM only)"
 echo "  Checkpoint:  ${CKPT_PATH}"
 echo "  Test set:    ${AIGC_BENCHMARK}"
-echo "  Datasets:    ${EVAL_DATASETS}"
+echo "  Datasets:    ${EVAL_SUBSETS}"
 echo "  Output dir:  ${OUTPUT_DIR}"
 echo "=============================="
 
