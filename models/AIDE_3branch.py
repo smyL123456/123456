@@ -215,6 +215,8 @@ class AIDE_Model(nn.Module):
         manifold_mixup=False,
         manifold_mixup_alpha=0.2,
         skip_pretrained=False,
+        zero_npr_at_eval=False,
+        use_gating=False,
     ):
         super(AIDE_Model, self).__init__()
         self.hpf = HPF()
@@ -268,6 +270,8 @@ class AIDE_Model(nn.Module):
         self.hpf_branch_dropout = hpf_branch_dropout
         self.manifold_mixup = manifold_mixup
         self.manifold_mixup_alpha = manifold_mixup_alpha
+        self.zero_npr_at_eval = zero_npr_at_eval
+        self.use_gating = use_gating
 
         if fusion_type != 'concat':
             raise ValueError(f'Unsupported fusion_type: {fusion_type}. Only concat is implemented.')
@@ -284,6 +288,13 @@ class AIDE_Model(nn.Module):
             # NPR branch + its own 512→npr_proj_dim linear projection
             self.npr_branch = build_npr_feature_extractor(checkpoint_path=npr_path, freeze=freeze_npr, skip_pretrained=skip_pretrained)
             self.npr_proj = nn.Linear(512, npr_proj_dim)
+
+            if self.use_gating:
+                self.npr_gate = nn.Sequential(
+                    nn.Linear(1024 + npr_proj_dim, npr_proj_dim),
+                    nn.Sigmoid(),
+                )
+
             # Stage-2 classifier: [1024 + npr_proj_dim] → 2
             self.classifier = Mlp(1024 + npr_proj_dim, 512, 2)
         else:
@@ -414,6 +425,13 @@ class AIDE_Model(nn.Module):
             x_npr = self._extract_npr_feature(tokens)
             x_npr = self._apply_npr_branch_dropout(x_npr)
 
+            if self.zero_npr_at_eval and not self.training:
+                x_npr = torch.zeros_like(x_npr)
+
+            if self.use_gating:
+                gate = self.npr_gate(torch.cat([x_fused, x_npr], dim=1))
+                x_npr = x_npr * gate
+
             # Stage-2 fusion: [fused, npr] → (B, 1024+npr_proj_dim)
             x_cat = torch.cat([x_fused, x_npr], dim=1)
             x_cat, targets = self._apply_manifold_mixup(x_cat, targets)
@@ -442,6 +460,8 @@ def AIDE(
     manifold_mixup=False,
     manifold_mixup_alpha=0.2,
     skip_pretrained=False,
+    zero_npr_at_eval=False,
+    use_gating=False,
 ):
     return AIDE_Model(
         resnet_path=resnet_path,
@@ -458,4 +478,6 @@ def AIDE(
         manifold_mixup=manifold_mixup,
         manifold_mixup_alpha=manifold_mixup_alpha,
         skip_pretrained=skip_pretrained,
+        zero_npr_at_eval=zero_npr_at_eval,
+        use_gating=use_gating,
     )

@@ -72,6 +72,10 @@ def get_args_parser():
                         help='Enable Manifold Mixup on fused features for cross-domain generalization')
     parser.add_argument('--manifold_mixup_alpha', default=0.2, type=float,
                         help='Beta distribution alpha for Manifold Mixup (0.2 recommended)')
+    parser.add_argument('--zero_npr_at_eval', type=str2bool, default=False,
+                        help='Zero out NPR features at eval time (E2a diagnostic)')
+    parser.add_argument('--use_gating', type=str2bool, default=False,
+                        help='Use adaptive sigmoid gating on NPR branch (E3)')
 
     # EMA related parameters
     parser.add_argument('--model_ema', type=str2bool, default=False)
@@ -297,6 +301,8 @@ def main(args):
         manifold_mixup=getattr(args, 'manifold_mixup', False),
         manifold_mixup_alpha=getattr(args, 'manifold_mixup_alpha', 0.2),
         skip_pretrained=getattr(args, 'skip_pretrained', False),
+        zero_npr_at_eval=getattr(args, 'zero_npr_at_eval', False),
+        use_gating=getattr(args, 'use_gating', False),
     )
         
     model.to(device)
