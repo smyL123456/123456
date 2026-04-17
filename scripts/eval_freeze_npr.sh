@@ -64,7 +64,7 @@ if [ "${NUM_GPUS}" -eq 1 ]; then
     --batch_size "${BATCH_SIZE}" \
     --num_workers 16 \
     --use_amp True \
-    --eval_datasets "${EVAL_DATASETS}" \
+    --eval_datasets "${EVAL_SUBSETS}" \
     "${PY_ARGS[@]}"
 else
   torchrun --nproc_per_node="${NUM_GPUS}" --master_port=29500 main_finetune.py \
@@ -80,7 +80,7 @@ else
     --batch_size "${BATCH_SIZE}" \
     --num_workers 16 \
     --use_amp True \
-    --eval_datasets "${EVAL_DATASETS}" \
+    --eval_datasets "${EVAL_SUBSETS}" \
     "${PY_ARGS[@]}"
 fi
 
