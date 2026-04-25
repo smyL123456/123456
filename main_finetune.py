@@ -159,6 +159,12 @@ def get_args_parser():
     # Dataset parameters
     parser.add_argument('--data_path', default='path/dataset', type=str,
                         help='dataset path')
+    parser.add_argument('--diffusion_path', default=None, type=str,
+                        help='Path to Diffusion training data for mixed training (E3/E4). '
+                             'Same directory layout as --data_path.')
+    parser.add_argument('--mix_ratio', default=0.0, type=float,
+                        help='Target fraction of Diffusion samples in the mixed training set '
+                             '(e.g. 0.1 = 10%%). Ignored when --diffusion_path is not set.')
     parser.add_argument('--nb_classes', default=2, type=int,
                         help='number of the classification types')
     parser.add_argument('--output_dir', default='',

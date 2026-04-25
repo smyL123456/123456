@@ -51,9 +51,28 @@ transform_test_normalize = transforms.Compose([
 )
 
 
+def _scan_progan_style(root, out_list):
+    """Walk a directory in the standard ProGAN/CNNSpot layout and append
+    {image_path, label} dicts to out_list. Root may contain subfolders
+    that each hold `0_real`/`1_fake`, or directly contain `0_real`/`1_fake`.
+    """
+    if '0_real' not in os.listdir(root):
+        for folder_name in os.listdir(root):
+            assert os.listdir(os.path.join(root, folder_name)) == ['0_real', '1_fake']
+            for image_path in os.listdir(os.path.join(root, folder_name, '0_real')):
+                out_list.append({"image_path": os.path.join(root, folder_name, '0_real', image_path), "label": 0})
+            for image_path in os.listdir(os.path.join(root, folder_name, '1_fake')):
+                out_list.append({"image_path": os.path.join(root, folder_name, '1_fake', image_path), "label": 1})
+    else:
+        for image_path in os.listdir(os.path.join(root, '0_real')):
+            out_list.append({"image_path": os.path.join(root, '0_real', image_path), "label": 0})
+        for image_path in os.listdir(os.path.join(root, '1_fake')):
+            out_list.append({"image_path": os.path.join(root, '1_fake', image_path), "label": 1})
+
+
 class TrainDataset(Dataset):
     def __init__(self, is_train, args):
-        
+
         root = args.data_path if is_train else args.eval_data_path
 
         self.data_list = []
@@ -99,6 +118,28 @@ class TrainDataset(Dataset):
                         self.data_list.append({"image_path": os.path.join(file_path, '0_real', image_path), "label" : 0})
                     for image_path in os.listdir(os.path.join(file_path, '1_fake')):
                         self.data_list.append({"image_path": os.path.join(file_path, '1_fake', image_path), "label" : 1})
+
+        # Optional: mix in a fraction of Diffusion samples for E3/E4.
+        diffusion_path = getattr(args, 'diffusion_path', None)
+        mix_ratio = getattr(args, 'mix_ratio', 0.0)
+        if is_train and diffusion_path is not None and 0.0 < mix_ratio < 1.0:
+            progan_list = self.data_list
+            diffusion_list = []
+            _scan_progan_style(diffusion_path, diffusion_list)
+
+            n_diff = int(len(progan_list) * mix_ratio / (1.0 - mix_ratio))
+            if len(diffusion_list) < n_diff:
+                print(f'[TrainDataset] WARNING: diffusion pool size {len(diffusion_list)} '
+                      f'< requested {n_diff}, using all available.')
+                sampled_diffusion = diffusion_list
+            else:
+                sampled_diffusion = random.sample(diffusion_list, n_diff)
+
+            self.data_list = progan_list + sampled_diffusion
+            total = len(self.data_list)
+            ratio = len(sampled_diffusion) / total if total > 0 else 0.0
+            print(f'[TrainDataset] progan={len(progan_list)}, '
+                  f'diffusion={len(sampled_diffusion)}, ratio≈{ratio:.3f}')
 
         # Shuffle data_list to mix real and fake samples
         if is_train:
