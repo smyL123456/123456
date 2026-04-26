@@ -8,6 +8,7 @@
 # Example:
 #   bash scripts/eval_aigcbenchmark.sh 3branch /AIGCDetect/models/123456/results/checkpoint-best.pth /data/CNNSpot/progan_train /data/default/AIGCDetectionBenchmark/test
 #   bash scripts/eval_aigcbenchmark.sh 2branch /path/to/official_2branch.pth /data/CNNSpot/progan_train /data/default/AIGCDetectionBenchmark/test
+#   EXCLUDE_SUBSETS=ADM bash scripts/eval_aigcbenchmark.sh 3branch /path/to/checkpoint.pth /path/to/progan_train /path/to/AIGCDetectionBenchmark/test
 
 set -euo pipefail
 
@@ -45,6 +46,7 @@ NPR_PATH="/AIGCDetect/models/123456/pretrained_ckpts/NPR.pth"
 
 # GPU configuration (set NUM_GPUS=2 for dual-GPU evaluation)
 NUM_GPUS=${NUM_GPUS:-1}
+EXCLUDE_SUBSETS="${EXCLUDE_SUBSETS:-}"
 
 if [ "${NUM_GPUS}" -eq 1 ]; then
   BATCH_SIZE=24
@@ -92,6 +94,11 @@ else
   exit 1
 fi
 
+EXTRA_EVAL_ARGS=()
+if [ -n "${EXCLUDE_SUBSETS}" ]; then
+  EXTRA_EVAL_ARGS+=(--exclude_eval_subsets "${EXCLUDE_SUBSETS}")
+fi
+
 mkdir -p "${OUTPUT_DIR}"
 
 echo "=============================="
@@ -102,6 +109,9 @@ echo "  Test set:    ${AIGC_BENCHMARK}"
 echo "  Output dir:  ${OUTPUT_DIR}"
 echo "  GPUs:        ${NUM_GPUS}"
 echo "  Batch size:  ${BATCH_SIZE}"
+if [ -n "${EXCLUDE_SUBSETS}" ]; then
+  echo "  Exclude:     ${EXCLUDE_SUBSETS}"
+fi
 echo "=============================="
 
 if [ "${NUM_GPUS}" -eq 1 ]; then
@@ -117,6 +127,7 @@ if [ "${NUM_GPUS}" -eq 1 ]; then
     --batch_size "${BATCH_SIZE}" \
     --num_workers "${NUM_WORKERS}" \
     --use_amp True \
+    "${EXTRA_EVAL_ARGS[@]}" \
     "${PY_ARGS[@]}"
 else
   torchrun --nproc_per_node="${NUM_GPUS}" --master_port=29500 main_finetune.py \
@@ -131,6 +142,7 @@ else
     --batch_size "${BATCH_SIZE}" \
     --num_workers "${NUM_WORKERS}" \
     --use_amp True \
+    "${EXTRA_EVAL_ARGS[@]}" \
     "${PY_ARGS[@]}"
 fi
 

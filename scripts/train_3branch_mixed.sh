@@ -11,15 +11,18 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 cd "${REPO_DIR}"
 
-# Paths (edit these).
-TRAIN_DATA="/data/CNNSpot/progan_train"
-DIFFUSION_DATA="/data/CNNSpot/diffusion_train"   # must be deduplicated vs test set
-MIX_RATIO=0.1
-EVAL_DATA="/data/CNNSpot/progan_val"
-RESNET_PATH="/AIGCDetect/models/123456/pretrained_ckpts/resnet50.pth"
-CONVNEXT_PATH="/AIGCDetect/models/123456/pretrained_ckpts/open_clip_pytorch_model.bin"
-NPR_PATH="/AIGCDetect/models/123456/pretrained_ckpts/NPR.pth"
-OUTPUT_DIR="/AIGCDetect/models/123456/results/3branch_mixed_10pct"
+# Paths (override via env when running remotely).
+TRAIN_DATA="${TRAIN_DATA:-/data/CNNSpot/progan_train}"
+DIFFUSION_DATA="${DIFFUSION_DATA:-/data/CNNSpot/diffusion_train}"   # must be deduplicated vs test set
+MIX_RATIO="${MIX_RATIO:-0.1}"
+EVAL_DATA="${EVAL_DATA:-/data/CNNSpot/progan_val}"
+DEDUP_REFERENCE_PATH="${DEDUP_REFERENCE_PATH:-}"
+DEDUP_MODE="${DEDUP_MODE:-name}"
+RESNET_PATH="${RESNET_PATH:-/AIGCDetect/models/123456/pretrained_ckpts/resnet50.pth}"
+CONVNEXT_PATH="${CONVNEXT_PATH:-/AIGCDetect/models/123456/pretrained_ckpts/open_clip_pytorch_model.bin}"
+NPR_PATH="${NPR_PATH:-/AIGCDetect/models/123456/pretrained_ckpts/NPR.pth}"
+MIX_TAG="${MIX_TAG:-${MIX_RATIO/./p}}"
+OUTPUT_DIR="${OUTPUT_DIR:-/AIGCDetect/models/123456/results/3branch_mixed_${MIX_TAG}}"
 
 NUM_GPUS=${NUM_GPUS:-2}
 
@@ -34,7 +37,7 @@ else
 fi
 
 BLR=1e-4
-WARMUP_EPOCHS=1
+WARMUP_EPOCHS=2
 EPOCHS=10
 SAVE_FREQ=3
 WEIGHT_DECAY=0.05
@@ -84,7 +87,16 @@ echo "  Workers: ${NUM_WORKERS}"
 echo "  ProGAN data: ${TRAIN_DATA}"
 echo "  Diffusion data: ${DIFFUSION_DATA}"
 echo "  Mix ratio: ${MIX_RATIO}"
+if [ -n "${DEDUP_REFERENCE_PATH}" ]; then
+  echo "  Dedup refs: ${DEDUP_REFERENCE_PATH}"
+  echo "  Dedup mode: ${DEDUP_MODE}"
+fi
 echo "=========================================="
+
+EXTRA_ARGS=()
+if [ -n "${DEDUP_REFERENCE_PATH}" ]; then
+  EXTRA_ARGS+=(--dedup_reference_path "${DEDUP_REFERENCE_PATH}" --dedup_mode "${DEDUP_MODE}")
+fi
 
 if [ "${NUM_GPUS}" -eq 1 ]; then
   python main_finetune.py \
@@ -106,11 +118,12 @@ if [ "${NUM_GPUS}" -eq 1 ]; then
     --num_workers "${NUM_WORKERS}" \
     --use_amp True \
     --freeze_npr False \
-    --skip_pretrained False \
+    --skip_pretrained True \
     --npr_proj_dim 128 \
     --npr_branch_dropout "${NPR_BRANCH_DROPOUT}" \
     --save_ckpt True \
     --save_ckpt_freq "${SAVE_FREQ}" \
+    "${EXTRA_ARGS[@]}" \
     "${PY_ARGS[@]}"
 else
   torchrun --nproc_per_node="${NUM_GPUS}" --master_port=29500 main_finetune.py \
@@ -132,11 +145,12 @@ else
     --num_workers "${NUM_WORKERS}" \
     --use_amp True \
     --freeze_npr False \
-    --skip_pretrained False \
+    --skip_pretrained True \
     --npr_proj_dim 128 \
     --npr_branch_dropout "${NPR_BRANCH_DROPOUT}" \
     --save_ckpt True \
     --save_ckpt_freq "${SAVE_FREQ}" \
+    "${EXTRA_ARGS[@]}" \
     "${PY_ARGS[@]}"
 fi
 

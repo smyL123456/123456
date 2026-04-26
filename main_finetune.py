@@ -165,6 +165,13 @@ def get_args_parser():
     parser.add_argument('--mix_ratio', default=0.0, type=float,
                         help='Target fraction of Diffusion samples in the mixed training set '
                              '(e.g. 0.1 = 10%%). Ignored when --diffusion_path is not set.')
+    parser.add_argument('--dedup_reference_path', default=None, type=str,
+                        help='Optional path or comma-separated paths used to deduplicate mixed '
+                             'Diffusion training samples against held-out evaluation data.')
+    parser.add_argument('--dedup_mode', default='none',
+                        choices=['none', 'name', 'relative', 'sha1'], type=str,
+                        help='How to match duplicates between diffusion training data and '
+                             'dedup_reference_path.')
     parser.add_argument('--nb_classes', default=2, type=int,
                         help='number of the classification types')
     parser.add_argument('--output_dir', default='',
@@ -204,6 +211,9 @@ def get_args_parser():
     parser.add_argument('--eval_subsets', default=None, type=str,
                         help='Comma-separated list of generator names to evaluate (e.g. ADM,VQDM,stargan). '
                              'If not set, all subsets in eval_data_path are evaluated.')
+    parser.add_argument('--exclude_eval_subsets', default=None, type=str,
+                        help='Comma-separated list of generator names to skip during evaluation '
+                             '(e.g. ADM,Glide). Applied after --eval_subsets filtering.')
 
     # distributed training parameters
     parser.add_argument('--world_size', default=1, type=int,
@@ -380,6 +390,13 @@ def main(args):
             vals = [v for v in vals if v in subsets]
             if not vals:
                 raise ValueError(f'--eval_subsets "{args.eval_subsets}" matched no entries in {args.eval_data_path}')
+        if args.exclude_eval_subsets:
+            excluded = {s.strip() for s in args.exclude_eval_subsets.split(',') if s.strip()}
+            vals = [v for v in vals if v not in excluded]
+            if not vals:
+                raise ValueError(
+                    f'--exclude_eval_subsets "{args.exclude_eval_subsets}" removed all entries in {args.eval_data_path}'
+                )
         eval_data_path = args.eval_data_path
 
         rows = [["{} model testing on...".format(args.resume)],

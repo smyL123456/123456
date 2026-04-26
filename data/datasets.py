@@ -6,15 +6,17 @@
 # LICENSE file in the root directory of this source tree.
 
 
-import os
-from torchvision import transforms
-from torch.utils.data import Dataset
-
-from PIL import Image
+import hashlib
 import io
-import torch
-from .dct import DCT_base_Rec_Module
+import os
 import random
+
+import torch
+from PIL import Image
+from torch.utils.data import Dataset
+from torchvision import transforms
+
+from .dct import DCT_base_Rec_Module
 
 try:
     from torchvision.transforms import InterpolationMode
@@ -51,23 +53,95 @@ transform_test_normalize = transforms.Compose([
 )
 
 
+def _list_subdirs(root):
+    return [
+        name for name in os.listdir(root)
+        if os.path.isdir(os.path.join(root, name))
+    ]
+
+
+def _has_binary_layout(root):
+    subdirs = set(_list_subdirs(root))
+    return '0_real' in subdirs and '1_fake' in subdirs
+
+
+def _append_binary_dir(root, out_list):
+    subdirs = set(_list_subdirs(root))
+    missing = {'0_real', '1_fake'} - subdirs
+    if missing:
+        raise ValueError(f'Expected 0_real/1_fake under {root}, missing: {sorted(missing)}')
+
+    for image_path in os.listdir(os.path.join(root, '0_real')):
+        out_list.append({"image_path": os.path.join(root, '0_real', image_path), "label": 0})
+    for image_path in os.listdir(os.path.join(root, '1_fake')):
+        out_list.append({"image_path": os.path.join(root, '1_fake', image_path), "label": 1})
+
+
 def _scan_progan_style(root, out_list):
     """Walk a directory in the standard ProGAN/CNNSpot layout and append
     {image_path, label} dicts to out_list. Root may contain subfolders
     that each hold `0_real`/`1_fake`, or directly contain `0_real`/`1_fake`.
     """
-    if '0_real' not in os.listdir(root):
-        for folder_name in os.listdir(root):
-            assert os.listdir(os.path.join(root, folder_name)) == ['0_real', '1_fake']
-            for image_path in os.listdir(os.path.join(root, folder_name, '0_real')):
-                out_list.append({"image_path": os.path.join(root, folder_name, '0_real', image_path), "label": 0})
-            for image_path in os.listdir(os.path.join(root, folder_name, '1_fake')):
-                out_list.append({"image_path": os.path.join(root, folder_name, '1_fake', image_path), "label": 1})
+    if _has_binary_layout(root):
+        _append_binary_dir(root, out_list)
     else:
-        for image_path in os.listdir(os.path.join(root, '0_real')):
-            out_list.append({"image_path": os.path.join(root, '0_real', image_path), "label": 0})
-        for image_path in os.listdir(os.path.join(root, '1_fake')):
-            out_list.append({"image_path": os.path.join(root, '1_fake', image_path), "label": 1})
+        for folder_name in _list_subdirs(root):
+            _append_binary_dir(os.path.join(root, folder_name), out_list)
+
+
+def _iter_dataset_samples(root):
+    samples = []
+    _scan_progan_style(root, samples)
+    return samples
+
+
+def _sha1_file(path, chunk_size=1024 * 1024):
+    digest = hashlib.sha1()
+    with open(path, 'rb') as handle:
+        while True:
+            chunk = handle.read(chunk_size)
+            if not chunk:
+                break
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _sample_key(sample_path, root, mode):
+    if mode == 'name':
+        return os.path.basename(sample_path)
+    if mode == 'relative':
+        return os.path.relpath(sample_path, root).replace('\\', '/')
+    if mode == 'sha1':
+        return _sha1_file(sample_path)
+    raise ValueError(f'Unsupported dedup mode: {mode}')
+
+
+def _parse_reference_roots(reference_arg):
+    if not reference_arg:
+        return []
+    return [item.strip() for item in reference_arg.split(',') if item.strip()]
+
+
+def _filter_duplicates(candidate_list, candidate_root, reference_roots, mode):
+    if mode == 'none' or not reference_roots:
+        return candidate_list, 0
+
+    reference_keys = set()
+    for ref_root in reference_roots:
+        ref_samples = _iter_dataset_samples(ref_root)
+        for sample in ref_samples:
+            reference_keys.add(_sample_key(sample['image_path'], ref_root, mode))
+
+    filtered = []
+    removed = 0
+    for sample in candidate_list:
+        sample_key = _sample_key(sample['image_path'], candidate_root, mode)
+        if sample_key in reference_keys:
+            removed += 1
+            continue
+        filtered.append(sample)
+
+    return filtered, removed
 
 
 class TrainDataset(Dataset):
@@ -77,55 +151,40 @@ class TrainDataset(Dataset):
 
         self.data_list = []
 
-        if'GenImage' in root and root.split('/')[-1] != 'train':
+        if 'GenImage' in root and root.split('/')[-1] != 'train':
             file_path = root
 
-            if '0_real' not in os.listdir(file_path):
-                for folder_name in os.listdir(file_path):
-                
-                    assert os.listdir(os.path.join(file_path, folder_name)) == ['0_real', '1_fake']
-
-                    for image_path in os.listdir(os.path.join(file_path, folder_name, '0_real')):
-                        self.data_list.append({"image_path": os.path.join(file_path, folder_name, '0_real', image_path), "label" : 0})
-                 
-                    for image_path in os.listdir(os.path.join(file_path, folder_name, '1_fake')):
-                        self.data_list.append({"image_path": os.path.join(file_path, folder_name, '1_fake', image_path), "label" : 1})
-            
+            if _has_binary_layout(file_path):
+                _append_binary_dir(file_path, self.data_list)
             else:
-                for image_path in os.listdir(os.path.join(file_path, '0_real')):
-                    self.data_list.append({"image_path": os.path.join(file_path, '0_real', image_path), "label" : 0})
-                for image_path in os.listdir(os.path.join(file_path, '1_fake')):
-                    self.data_list.append({"image_path": os.path.join(file_path, '1_fake', image_path), "label" : 1})
+                for folder_name in _list_subdirs(file_path):
+                    _append_binary_dir(os.path.join(file_path, folder_name), self.data_list)
         else:
 
-            for filename in os.listdir(root):
+            for filename in _list_subdirs(root):
 
                 file_path = os.path.join(root, filename)
 
-                if '0_real' not in os.listdir(file_path):
-                    for folder_name in os.listdir(file_path):
-                    
-                        assert os.listdir(os.path.join(file_path, folder_name)) == ['0_real', '1_fake']
-
-                        for image_path in os.listdir(os.path.join(file_path, folder_name, '0_real')):
-                            self.data_list.append({"image_path": os.path.join(file_path, folder_name, '0_real', image_path), "label" : 0})
-                    
-                        for image_path in os.listdir(os.path.join(file_path, folder_name, '1_fake')):
-                            self.data_list.append({"image_path": os.path.join(file_path, folder_name, '1_fake', image_path), "label" : 1})
-                
+                if _has_binary_layout(file_path):
+                    _append_binary_dir(file_path, self.data_list)
                 else:
-                    for image_path in os.listdir(os.path.join(file_path, '0_real')):
-                        self.data_list.append({"image_path": os.path.join(file_path, '0_real', image_path), "label" : 0})
-                    for image_path in os.listdir(os.path.join(file_path, '1_fake')):
-                        self.data_list.append({"image_path": os.path.join(file_path, '1_fake', image_path), "label" : 1})
+                    for folder_name in _list_subdirs(file_path):
+                        _append_binary_dir(os.path.join(file_path, folder_name), self.data_list)
 
         # Optional: mix in a fraction of Diffusion samples for E3/E4.
         diffusion_path = getattr(args, 'diffusion_path', None)
         mix_ratio = getattr(args, 'mix_ratio', 0.0)
         if is_train and diffusion_path is not None and 0.0 < mix_ratio < 1.0:
             progan_list = self.data_list
-            diffusion_list = []
-            _scan_progan_style(diffusion_path, diffusion_list)
+            diffusion_list = _iter_dataset_samples(diffusion_path)
+
+            dedup_mode = getattr(args, 'dedup_mode', 'none')
+            reference_roots = _parse_reference_roots(getattr(args, 'dedup_reference_path', None))
+            diffusion_list, removed = _filter_duplicates(
+                diffusion_list, diffusion_path, reference_roots, dedup_mode
+            )
+            if removed > 0:
+                print(f'[TrainDataset] dedup removed {removed} diffusion samples using mode={dedup_mode}')
 
             n_diff = int(len(progan_list) * mix_ratio / (1.0 - mix_ratio))
             if len(diffusion_list) < n_diff:
@@ -138,8 +197,10 @@ class TrainDataset(Dataset):
             self.data_list = progan_list + sampled_diffusion
             total = len(self.data_list)
             ratio = len(sampled_diffusion) / total if total > 0 else 0.0
-            print(f'[TrainDataset] progan={len(progan_list)}, '
-                  f'diffusion={len(sampled_diffusion)}, ratio≈{ratio:.3f}')
+            print(
+                f'[TrainDataset] progan={len(progan_list)}, '
+                f'diffusion={len(sampled_diffusion)}, ratio={ratio:.3f}'
+            )
 
         # Shuffle data_list to mix real and fake samples
         if is_train:
@@ -147,14 +208,13 @@ class TrainDataset(Dataset):
 
         self.dct = DCT_base_Rec_Module()
 
-
     def __len__(self):
         return len(self.data_list)
 
     def __getitem__(self, index):
-        
+
         sample = self.data_list[index]
-                
+
         image_path, targets = sample['image_path'], sample['label']
 
         try:
@@ -162,7 +222,6 @@ class TrainDataset(Dataset):
         except:
             print(f'image error: {image_path}')
             return self.__getitem__(random.randint(0, len(self.data_list) - 1))
-
 
         image = transform_before(image)
 
@@ -173,55 +232,39 @@ class TrainDataset(Dataset):
             return self.__getitem__(random.randint(0, len(self.data_list) - 1))
 
         x_0 = transform_train(image)
-        x_minmin = transform_train(x_minmin) 
+        x_minmin = transform_train(x_minmin)
         x_maxmax = transform_train(x_maxmax)
 
-        x_minmin1 = transform_train(x_minmin1) 
+        x_minmin1 = transform_train(x_minmin1)
         x_maxmax1 = transform_train(x_maxmax1)
-        
-
 
         return torch.stack([x_minmin, x_maxmax, x_minmin1, x_maxmax1, x_0], dim=0), torch.tensor(int(targets))
 
-    
 
 class TestDataset(Dataset):
     def __init__(self, is_train, args):
-        
+
         root = args.data_path if is_train else args.eval_data_path
 
         self.data_list = []
 
         file_path = root
 
-        if '0_real' not in os.listdir(file_path):
-            for folder_name in os.listdir(file_path):
-    
-                assert os.listdir(os.path.join(file_path, folder_name)) == ['0_real', '1_fake']
-                
-                for image_path in os.listdir(os.path.join(file_path, folder_name, '0_real')):
-                    self.data_list.append({"image_path": os.path.join(file_path, folder_name, '0_real', image_path), "label" : 0})
-                
-                for image_path in os.listdir(os.path.join(file_path, folder_name, '1_fake')):
-                    self.data_list.append({"image_path": os.path.join(file_path, folder_name, '1_fake', image_path), "label" : 1})
-        
+        if _has_binary_layout(file_path):
+            _append_binary_dir(file_path, self.data_list)
         else:
-            for image_path in os.listdir(os.path.join(file_path, '0_real')):
-                self.data_list.append({"image_path": os.path.join(file_path, '0_real', image_path), "label" : 0})
-            for image_path in os.listdir(os.path.join(file_path, '1_fake')):
-                self.data_list.append({"image_path": os.path.join(file_path, '1_fake', image_path), "label" : 1})
-
+            for folder_name in _list_subdirs(file_path):
+                _append_binary_dir(os.path.join(file_path, folder_name), self.data_list)
 
         self.dct = DCT_base_Rec_Module()
-
 
     def __len__(self):
         return len(self.data_list)
 
     def __getitem__(self, index):
-        
+
         sample = self.data_list[index]
-                
+
         image_path, targets = sample['image_path'], sample['label']
 
         image = Image.open(image_path).convert('RGB')
@@ -232,13 +275,11 @@ class TestDataset(Dataset):
 
         x_minmin, x_maxmax, x_minmin1, x_maxmax1 = self.dct(image)
 
-
         x_0 = transform_train(image)
-        x_minmin = transform_train(x_minmin) 
+        x_minmin = transform_train(x_minmin)
         x_maxmax = transform_train(x_maxmax)
 
-        x_minmin1 = transform_train(x_minmin1) 
+        x_minmin1 = transform_train(x_minmin1)
         x_maxmax1 = transform_train(x_maxmax1)
-        
-        return torch.stack([x_minmin, x_maxmax, x_minmin1, x_maxmax1, x_0], dim=0), torch.tensor(int(targets))
 
+        return torch.stack([x_minmin, x_maxmax, x_minmin1, x_maxmax1, x_0], dim=0), torch.tensor(int(targets))
