@@ -43,8 +43,15 @@ echo "  Output dir: ${OUTPUT_DIR_DEFAULT}"
 echo "  Suggested eval exclude: ${EVAL_EXCLUDE_DEFAULT}"
 echo "=========================================="
 
-NUM_GPUS="${NUM_GPUS_DEFAULT}" \
-DIFFUSION_DATA="${DIFFUSION_DATA_DEFAULT}" \
-DIFFUSION_SUBSETS="${DIFFUSION_SUBSETS_DEFAULT}" \
-OUTPUT_DIR="${OUTPUT_DIR_DEFAULT}" \
+if [ ! -d "${DIFFUSION_DATA_DEFAULT}" ]; then
+  echo "[ERROR] DIFFUSION_DATA not found: ${DIFFUSION_DATA_DEFAULT}"
+  echo "Set DIFFUSION_DATA to your AIGCDetectionBenchmark/test path."
+  exit 1
+fi
+
+export NUM_GPUS="${NUM_GPUS_DEFAULT}"
+export DIFFUSION_DATA="${DIFFUSION_DATA_DEFAULT}"
+export DIFFUSION_SUBSETS="${DIFFUSION_SUBSETS_DEFAULT}"
+export OUTPUT_DIR="${OUTPUT_DIR_DEFAULT}"
+
 bash "${SCRIPT_DIR}/train_3branch_mixed.sh" "$@"
