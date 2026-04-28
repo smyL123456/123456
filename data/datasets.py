@@ -34,11 +34,13 @@ Perturbations = K.container.ImageSequential(
 )
 
 transform_before = transforms.Compose([
+    transforms.Resize([256, 256]),
     transforms.ToTensor(),
     transforms.Lambda(lambda x: Perturbations(x)[0])
     ]
 )
 transform_before_test = transforms.Compose([
+    transforms.Resize([256, 256]),
     transforms.ToTensor(),
     ]
 )
