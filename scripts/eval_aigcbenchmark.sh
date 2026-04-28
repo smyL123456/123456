@@ -43,7 +43,10 @@ cd "${REPO_DIR}"
 
 CONVNEXT_PATH="/AIGCDetect/models/123456/pretrained_ckpts/open_clip_pytorch_model.bin"
 NPR_PATH="/AIGCDetect/models/123456/pretrained_ckpts/NPR.pth"
-FUSION_TYPE="${FUSION_TYPE:-concat}"
+# Changed default from concat to residual to match E3 checkpoint (residual fusion mode).
+# For older E2 concat checkpoints, run with: FUSION_TYPE=concat bash scripts/eval_aigcbenchmark.sh ...
+# Default to residual (E3 mode); set FUSION_TYPE=concat for E2 checkpoints
+FUSION_TYPE="${FUSION_TYPE:-residual}"
 NPR_RESIDUAL_ALPHA_INIT="${NPR_RESIDUAL_ALPHA_INIT:-0.1}"
 
 # GPU configuration (set NUM_GPUS=2 for dual-GPU evaluation)
