@@ -30,13 +30,13 @@ class DummyClipModel(nn.Module):
         self.visual.trunk = DummyTrunk()
 
 
-def main():
+def _check_forward(fusion_type):
     model = AIDE_3BRANCH(
         resnet_path=None,
         convnext_path=None,
         use_npr=True,
         npr_path=None,
-        fusion_type="concat",
+        fusion_type=fusion_type,
         freeze_npr=True,
         openclip_model=DummyClipModel(),
     )
@@ -44,6 +44,11 @@ def main():
     with torch.no_grad():
         y = model(x)
     assert y.shape == (2, 2), y.shape
+
+
+def main():
+    _check_forward("concat")
+    _check_forward("residual")
     print("ok")
 
 

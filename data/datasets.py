@@ -89,12 +89,6 @@ def _scan_progan_style(root, out_list):
             _append_binary_dir(os.path.join(root, folder_name), out_list)
 
 
-def _iter_dataset_samples(root):
-    samples = []
-    _scan_progan_style(root, samples)
-    return samples
-
-
 def _sha1_file(path, chunk_size=1024 * 1024):
     digest = hashlib.sha1()
     with open(path, 'rb') as handle:
@@ -120,6 +114,38 @@ def _parse_reference_roots(reference_arg):
     if not reference_arg:
         return []
     return [item.strip() for item in reference_arg.split(',') if item.strip()]
+
+
+def _parse_subset_names(subset_arg):
+    if not subset_arg:
+        return []
+    return [item.strip() for item in subset_arg.split(',') if item.strip()]
+
+
+def _iter_dataset_samples(root, subset_arg=None):
+    samples = []
+    subsets = _parse_subset_names(subset_arg)
+
+    if not subsets:
+        _scan_progan_style(root, samples)
+        return samples
+
+    if _has_binary_layout(root):
+        root_name = os.path.basename(os.path.normpath(root))
+        if root_name in subsets:
+            _append_binary_dir(root, samples)
+        return samples
+
+    missing = []
+    for subset in subsets:
+        subset_root = os.path.join(root, subset)
+        if not os.path.isdir(subset_root):
+            missing.append(subset)
+            continue
+        _append_binary_dir(subset_root, samples)
+    if missing:
+        raise ValueError(f'Diffusion subsets not found under {root}: {missing}')
+    return samples
 
 
 def _filter_duplicates(candidate_list, candidate_root, reference_roots, mode):
@@ -176,7 +202,10 @@ class TrainDataset(Dataset):
         mix_ratio = getattr(args, 'mix_ratio', 0.0)
         if is_train and diffusion_path is not None and 0.0 < mix_ratio < 1.0:
             progan_list = self.data_list
-            diffusion_list = _iter_dataset_samples(diffusion_path)
+            diffusion_subsets = getattr(args, 'diffusion_subsets', None)
+            diffusion_list = _iter_dataset_samples(diffusion_path, diffusion_subsets)
+            if diffusion_subsets:
+                print(f'[TrainDataset] diffusion subsets: {diffusion_subsets}')
 
             dedup_mode = getattr(args, 'dedup_mode', 'none')
             reference_roots = _parse_reference_roots(getattr(args, 'dedup_reference_path', None))

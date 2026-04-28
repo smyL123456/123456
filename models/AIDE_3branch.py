@@ -1,3 +1,4 @@
+import math
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -217,6 +218,7 @@ class AIDE_Model(nn.Module):
         skip_pretrained=False,
         zero_npr_at_eval=False,
         use_gating=False,
+        npr_residual_alpha_init=0.1,
     ):
         super(AIDE_Model, self).__init__()
         self.hpf = HPF()
@@ -273,8 +275,10 @@ class AIDE_Model(nn.Module):
         self.zero_npr_at_eval = zero_npr_at_eval
         self.use_gating = use_gating
 
-        if fusion_type != 'concat':
-            raise ValueError(f'Unsupported fusion_type: {fusion_type}. Only concat is implemented.')
+        if fusion_type not in ('concat', 'residual'):
+            raise ValueError(
+                f'Unsupported fusion_type: {fusion_type}. Supported: concat, residual.'
+            )
 
         # Stage-1 fusion: HPF + Semantic → 1024-dim shared representation.
         # This sub-graph is identical to the AIDE_2BRANCH fusion projection,
@@ -296,7 +300,18 @@ class AIDE_Model(nn.Module):
                 )
 
             # Stage-2 classifier: [1024 + npr_proj_dim] → 2
-            self.classifier = Mlp(1024 + npr_proj_dim, 512, 2)
+            if self.fusion_type == 'concat':
+                self.classifier = Mlp(1024 + npr_proj_dim, 512, 2)
+            else:
+                self.classifier = nn.Linear(1024, 2)
+                self.npr_classifier = nn.Sequential(
+                    nn.LayerNorm(npr_proj_dim, elementwise_affine=False),
+                    nn.Linear(npr_proj_dim, 2, bias=False),
+                )
+                init_alpha = min(max(float(npr_residual_alpha_init), 1e-6), 1.0 - 1e-6)
+                self.npr_alpha_logit = nn.Parameter(
+                    torch.tensor(math.log(init_alpha / (1.0 - init_alpha)), dtype=torch.float32)
+                )
         else:
             # 2-branch path: direct classifier on 1024-dim fused features.
             # Mlp(1024, 1024, 2) with hidden=1024 is the same as Linear(1024→1024)+GELU+Linear(1024→2).
@@ -433,9 +448,20 @@ class AIDE_Model(nn.Module):
                 x_npr = x_npr * gate
 
             # Stage-2 fusion: [fused, npr] → (B, 1024+npr_proj_dim)
-            x_cat = torch.cat([x_fused, x_npr], dim=1)
-            x_cat, targets = self._apply_manifold_mixup(x_cat, targets)
-            out = self.classifier(x_cat)
+            if self.fusion_type == 'concat':
+                x_cat = torch.cat([x_fused, x_npr], dim=1)
+                x_cat, targets = self._apply_manifold_mixup(x_cat, targets)
+                out = self.classifier(x_cat)
+            else:
+                x_cat = torch.cat([x_fused, x_npr], dim=1)
+                x_cat, targets = self._apply_manifold_mixup(x_cat, targets)
+                x_fused = x_cat[:, :1024]
+                x_npr = x_cat[:, 1024:]
+
+                base_logits = self.classifier(x_fused)
+                npr_logits = self.npr_classifier(x_npr)
+                npr_alpha = torch.sigmoid(self.npr_alpha_logit)
+                out = base_logits + npr_alpha * npr_logits
         else:
             x_fused, targets = self._apply_manifold_mixup(x_fused, targets)
             out = self.classifier(x_fused)
@@ -462,6 +488,7 @@ def AIDE(
     skip_pretrained=False,
     zero_npr_at_eval=False,
     use_gating=False,
+    npr_residual_alpha_init=0.1,
 ):
     return AIDE_Model(
         resnet_path=resnet_path,
@@ -480,4 +507,5 @@ def AIDE(
         skip_pretrained=skip_pretrained,
         zero_npr_at_eval=zero_npr_at_eval,
         use_gating=use_gating,
+        npr_residual_alpha_init=npr_residual_alpha_init,
     )

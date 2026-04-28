@@ -43,6 +43,8 @@ cd "${REPO_DIR}"
 
 CONVNEXT_PATH="/AIGCDetect/models/123456/pretrained_ckpts/open_clip_pytorch_model.bin"
 NPR_PATH="/AIGCDetect/models/123456/pretrained_ckpts/NPR.pth"
+FUSION_TYPE="${FUSION_TYPE:-concat}"
+NPR_RESIDUAL_ALPHA_INIT="${NPR_RESIDUAL_ALPHA_INIT:-0.1}"
 
 # GPU configuration (set NUM_GPUS=2 for dual-GPU evaluation)
 NUM_GPUS=${NUM_GPUS:-1}
@@ -84,7 +86,11 @@ if [ "${MODE}" = "3branch" ]; then
     echo "[ERROR] NPR_PATH not found: ${NPR_PATH}"
     exit 1
   fi
-  EXTRA_MODEL_ARGS=(--npr_path "${NPR_PATH}")
+  EXTRA_MODEL_ARGS=(
+    --npr_path "${NPR_PATH}"
+    --fusion_type "${FUSION_TYPE}"
+    --npr_residual_alpha_init "${NPR_RESIDUAL_ALPHA_INIT}"
+  )
 elif [ "${MODE}" = "2branch" ]; then
   MODEL="AIDE_2BRANCH"
   OUTPUT_DIR="results/eval_2branch"
@@ -109,6 +115,9 @@ echo "  Test set:    ${AIGC_BENCHMARK}"
 echo "  Output dir:  ${OUTPUT_DIR}"
 echo "  GPUs:        ${NUM_GPUS}"
 echo "  Batch size:  ${BATCH_SIZE}"
+if [ "${MODE}" = "3branch" ]; then
+  echo "  Fusion:      ${FUSION_TYPE}"
+fi
 if [ -n "${EXCLUDE_SUBSETS}" ]; then
   echo "  Exclude:     ${EXCLUDE_SUBSETS}"
 fi

@@ -14,6 +14,7 @@ cd "${REPO_DIR}"
 # Paths (override via env when running remotely).
 TRAIN_DATA="${TRAIN_DATA:-/data/CNNSpot/progan_train}"
 DIFFUSION_DATA="${DIFFUSION_DATA:-/data/CNNSpot/diffusion_train}"   # must be deduplicated vs test set
+DIFFUSION_SUBSETS="${DIFFUSION_SUBSETS:-}"
 MIX_RATIO="${MIX_RATIO:-0.1}"
 EVAL_DATA="${EVAL_DATA:-/data/CNNSpot/progan_val}"
 DEDUP_REFERENCE_PATH="${DEDUP_REFERENCE_PATH:-}"
@@ -21,8 +22,10 @@ DEDUP_MODE="${DEDUP_MODE:-name}"
 RESNET_PATH="${RESNET_PATH:-/AIGCDetect/models/123456/pretrained_ckpts/resnet50.pth}"
 CONVNEXT_PATH="${CONVNEXT_PATH:-/AIGCDetect/models/123456/pretrained_ckpts/open_clip_pytorch_model.bin}"
 NPR_PATH="${NPR_PATH:-/AIGCDetect/models/123456/pretrained_ckpts/NPR.pth}"
+FUSION_TYPE="${FUSION_TYPE:-residual}"
+NPR_RESIDUAL_ALPHA_INIT="${NPR_RESIDUAL_ALPHA_INIT:-0.1}"
 MIX_TAG="${MIX_TAG:-${MIX_RATIO/./p}}"
-OUTPUT_DIR="${OUTPUT_DIR:-/AIGCDetect/models/123456/results/3branch_mixed_${MIX_TAG}}"
+OUTPUT_DIR="${OUTPUT_DIR:-/AIGCDetect/models/123456/results/3branch_mixed_${FUSION_TYPE}_${MIX_TAG}}"
 
 NUM_GPUS=${NUM_GPUS:-2}
 
@@ -42,6 +45,8 @@ EPOCHS=10
 SAVE_FREQ=3
 WEIGHT_DECAY=0.05
 NPR_BRANCH_DROPOUT=0.3
+FREEZE_NPR="${FREEZE_NPR:-True}"
+SKIP_PRETRAINED="${SKIP_PRETRAINED:-False}"
 
 PY_ARGS=("$@")
 
@@ -86,7 +91,14 @@ echo "  Effective batch size: $((BATCH_SIZE * UPDATE_FREQ * NUM_GPUS))"
 echo "  Workers: ${NUM_WORKERS}"
 echo "  ProGAN data: ${TRAIN_DATA}"
 echo "  Diffusion data: ${DIFFUSION_DATA}"
+if [ -n "${DIFFUSION_SUBSETS}" ]; then
+  echo "  Diffusion subsets: ${DIFFUSION_SUBSETS}"
+fi
 echo "  Mix ratio: ${MIX_RATIO}"
+echo "  Fusion type: ${FUSION_TYPE}"
+echo "  NPR residual alpha init: ${NPR_RESIDUAL_ALPHA_INIT}"
+echo "  Freeze NPR: ${FREEZE_NPR}"
+echo "  Skip NPR pretrained: ${SKIP_PRETRAINED}"
 if [ -n "${DEDUP_REFERENCE_PATH}" ]; then
   echo "  Dedup refs: ${DEDUP_REFERENCE_PATH}"
   echo "  Dedup mode: ${DEDUP_MODE}"
@@ -94,6 +106,9 @@ fi
 echo "=========================================="
 
 EXTRA_ARGS=()
+if [ -n "${DIFFUSION_SUBSETS}" ]; then
+  EXTRA_ARGS+=(--diffusion_subsets "${DIFFUSION_SUBSETS}")
+fi
 if [ -n "${DEDUP_REFERENCE_PATH}" ]; then
   EXTRA_ARGS+=(--dedup_reference_path "${DEDUP_REFERENCE_PATH}" --dedup_mode "${DEDUP_MODE}")
 fi
@@ -108,6 +123,7 @@ if [ "${NUM_GPUS}" -eq 1 ]; then
     --resnet_path "${RESNET_PATH}" \
     --convnext_path "${CONVNEXT_PATH}" \
     --npr_path "${NPR_PATH}" \
+    --fusion_type "${FUSION_TYPE}" \
     --output_dir "${OUTPUT_DIR}" \
     --batch_size "${BATCH_SIZE}" \
     --update_freq "${UPDATE_FREQ}" \
@@ -117,10 +133,11 @@ if [ "${NUM_GPUS}" -eq 1 ]; then
     --epochs "${EPOCHS}" \
     --num_workers "${NUM_WORKERS}" \
     --use_amp True \
-    --freeze_npr False \
-    --skip_pretrained True \
+    --freeze_npr "${FREEZE_NPR}" \
+    --skip_pretrained "${SKIP_PRETRAINED}" \
     --npr_proj_dim 128 \
     --npr_branch_dropout "${NPR_BRANCH_DROPOUT}" \
+    --npr_residual_alpha_init "${NPR_RESIDUAL_ALPHA_INIT}" \
     --save_ckpt True \
     --save_ckpt_freq "${SAVE_FREQ}" \
     "${EXTRA_ARGS[@]}" \
@@ -135,6 +152,7 @@ else
     --resnet_path "${RESNET_PATH}" \
     --convnext_path "${CONVNEXT_PATH}" \
     --npr_path "${NPR_PATH}" \
+    --fusion_type "${FUSION_TYPE}" \
     --output_dir "${OUTPUT_DIR}" \
     --batch_size "${BATCH_SIZE}" \
     --update_freq "${UPDATE_FREQ}" \
@@ -144,10 +162,11 @@ else
     --epochs "${EPOCHS}" \
     --num_workers "${NUM_WORKERS}" \
     --use_amp True \
-    --freeze_npr False \
-    --skip_pretrained True \
+    --freeze_npr "${FREEZE_NPR}" \
+    --skip_pretrained "${SKIP_PRETRAINED}" \
     --npr_proj_dim 128 \
     --npr_branch_dropout "${NPR_BRANCH_DROPOUT}" \
+    --npr_residual_alpha_init "${NPR_RESIDUAL_ALPHA_INIT}" \
     --save_ckpt True \
     --save_ckpt_freq "${SAVE_FREQ}" \
     "${EXTRA_ARGS[@]}" \

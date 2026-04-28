@@ -54,7 +54,7 @@ def get_args_parser():
                         help='Deprecated: kept for compatibility; model selection now controls branch count')
     parser.add_argument('--npr_path', default=None, type=str,
                         help='Path to pretrained NPR checkpoint')
-    parser.add_argument('--fusion_type', default='concat', choices=['concat'], type=str,
+    parser.add_argument('--fusion_type', default='concat', choices=['concat', 'residual'], type=str,
                         help='Late fusion type')
     parser.add_argument('--freeze_npr', type=str2bool, default=True,
                         help='Freeze NPR branch parameters')
@@ -76,6 +76,8 @@ def get_args_parser():
                         help='Zero out NPR features at eval time (E2a diagnostic)')
     parser.add_argument('--use_gating', type=str2bool, default=False,
                         help='Use adaptive sigmoid gating on NPR branch (E3)')
+    parser.add_argument('--npr_residual_alpha_init', default=0.1, type=float,
+                        help='Initial sigmoid alpha for residual NPR logit fusion')
 
     # EMA related parameters
     parser.add_argument('--model_ema', type=str2bool, default=False)
@@ -162,6 +164,9 @@ def get_args_parser():
     parser.add_argument('--diffusion_path', default=None, type=str,
                         help='Path to Diffusion training data for mixed training (E3/E4). '
                              'Same directory layout as --data_path.')
+    parser.add_argument('--diffusion_subsets', default=None, type=str,
+                        help='Optional comma-separated subset names under --diffusion_path to use '
+                             'as the Diffusion training pool (e.g. ADM,Glide,stable_diffusion_v_1_4).')
     parser.add_argument('--mix_ratio', default=0.0, type=float,
                         help='Target fraction of Diffusion samples in the mixed training set '
                              '(e.g. 0.1 = 10%%). Ignored when --diffusion_path is not set.')
@@ -319,6 +324,7 @@ def main(args):
         skip_pretrained=getattr(args, 'skip_pretrained', False),
         zero_npr_at_eval=getattr(args, 'zero_npr_at_eval', False),
         use_gating=getattr(args, 'use_gating', False),
+        npr_residual_alpha_init=getattr(args, 'npr_residual_alpha_init', 0.1),
     )
         
     model.to(device)
