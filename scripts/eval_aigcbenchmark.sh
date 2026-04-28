@@ -14,7 +14,7 @@ set -euo pipefail
 
 # Default paths (from train_3branch.sh)
 DEFAULT_MODE="3branch"
-DEFAULT_CKPT="/AIGCDetect/models/123456/results/3branch_train/checkpoint-best.pth"
+DEFAULT_CKPT="/AIGCDetect/models/123456/results/3branch_adm_glide_sdv14_0p1/checkpoint-best.pth"
 DEFAULT_TRAIN="/data/CNNSpot/progan_train"
 DEFAULT_TEST="/data/default/AIGCDetectionBenchmark/test"
 
