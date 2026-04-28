@@ -49,15 +49,15 @@ NPR_PATH="/AIGCDetect/models/123456/pretrained_ckpts/NPR.pth"
 FUSION_TYPE="${FUSION_TYPE:-residual}"
 NPR_RESIDUAL_ALPHA_INIT="${NPR_RESIDUAL_ALPHA_INIT:-0.1}"
 
-# GPU configuration (set NUM_GPUS=2 for dual-GPU evaluation)
-NUM_GPUS=${NUM_GPUS:-1}
+# GPU configuration
+NUM_GPUS=${NUM_GPUS:-2}
 EXCLUDE_SUBSETS="${EXCLUDE_SUBSETS:-}"
 
 if [ "${NUM_GPUS}" -eq 1 ]; then
-  BATCH_SIZE=24
+  BATCH_SIZE=64
   NUM_WORKERS=16
 else
-  BATCH_SIZE=32
+  BATCH_SIZE=64
   NUM_WORKERS=16
 fi
 
